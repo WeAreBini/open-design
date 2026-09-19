@@ -1,0 +1,240 @@
+* 紧凑 chip 的读屏标签 / 提示里那个「谁在跑」。
+   *
+   * **必须跟着 `config.mode` 分岔**,和非紧凑那支的 `chipPrimary` 同一条规则。
+   * 原来无条件取 `displayAgentName(currentAgent)`,而 API/BYOK 模式下
+   * `config.agentId` 还留着上一个 daemon agent —— 真机上配好 OpenRouter 之后
+   * chip 念的是「Claude Code · google/gemini-2.5-flash」,可那一轮真正跑的是
+   * `byok-opencode`。可见文字只有模型名,所以只有读屏用户会被念错。
+   */
+  const chipAgentLabel =
+    config.mode === 'daemon'
+      ? currentAgent
+        ? displayAgentName(currentAgent)
+        : t('inlineSwitcher.chipTitle')
+      : apiProtocolLabel(apiProtocol);
+
+  const handleChipClick = useCallback(() => {
+    const nextOpen = !open;
+    if (nextOpen && showAmrReminder) {
+      setShowAmrReminderInPopover(true);
+      setAmrReminderSeen(true);
+      markAmrReminderSeen();
+    } else if (!nextOpen) {
+      setShowAmrReminderInPopover(false);
+    }
+    setOpen(nextOpen);
+  }, [open, showAmrReminder]);
+
+  useEffect(() => {
+    if (!open || config.mode !== 'daemon' || config.agentId === 'amr') {
+      setShowAmrReminderInPopover(false);
+    }
+  }, [config.agentId, config.mode, open]);
+
+  return (
+    <div
+      className={`inline-switcher${compact ? ' inline-switcher--compact' : ''}`}
+      ref={wrapRef}
+      data-testid="inline-model-switcher"
+    >
+      <button
+        ref={chipRef}
+        type="button"
+        className={
+          'inline-switcher__chip' +
+          (compact ? ' inline-switcher__chip--icon' : '')
+        }
+        data-testid="inline-model-switcher-chip"
+        onClick={handleChipClick}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        // No hover bubble: the chip already prints the model it would name,
+        // and the popover it opens spells out the agent — a tooltip repeating
+        // both only covered the composer text under it. The accessible name
+        // stays, so the icon-only treatment is still announced.
+        aria-label={
+          compact
+            ? `${chipAgentLabel} · ${chipModel}`
+            : `${chipMode} · ${chipPrimary} · ${chipModel}`
+        }
+      >
+        {compact ? (
+          <>
+            {/* Reachability dot leads the chip: it qualifies the whole run
+                that follows (brand mark + model name) rather than reading as
+                punctuation wedged into the model label. */}
+            <span
+              className="inline-switcher__chip-conn"
+              data-connected={chipConnected ? 'true' : 'false'}
+              aria-hidden="true"
+            />
+            {/* The selected MODEL's brand mark — the same artwork its row in
+                the list below carries, so the chip and the row a user just
+                clicked show the same thing. Falls back to the agent logo (and
+                then the BYOK link glyph) when the vendor has no mark. */}
+            <span className="inline-switcher__chip-icon" aria-hidden="true">
+              {chipModelIconSrc ? (
+                <img
+                  className="inline-switcher__chip-model-logo"
+                  src={chipModelIconSrc}
+                  alt=""
+                  width={18}
+                  height={18}
+                />
+              ) : config.mode === 'daemon' && currentAgent ? (
+                <AgentIcon id={currentAgent.id} size={18} />
+              ) : (
+                <span className="inline-switcher__byok-glyph">
+                  <Icon name="link" size={14} />
+                </span>
+              )}
+            </span>
+            <span className="inline-switcher__chip-model-name">
+              {chipModelName}
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="inline-switcher__chip-icon" aria-hidden="true">
+              {config.mode === 'daemon' && currentAgent ? (
+                <AgentIcon id={currentAgent.id} size={18} />
+              ) : (
+                <span className="inline-switcher__byok-glyph">
+                  <Icon name="link" size={14} />
+                </span>
+              )}
+            </span>
+            <span className="inline-switcher__chip-text">
+              <span className="inline-switcher__chip-mode">{chipMode}</span>
+              <span className="inline-switcher__chip-sep" aria-hidden="true">
+                ·
+              </span>
+              <span className="inline-switcher__chip-primary">{chipPrimary}</span>
+              <span className="inline-switcher__chip-sep" aria-hidden="true">
+                ·
+              </span>
+              <span className="inline-switcher__chip-model">{chipModelName}</span>
+            </span>
+            <Icon
+              name="chevron-down"
+              size={12}
+              className="inline-switcher__chip-chevron"
+            />
+          </>
+        )}
+      </button>
+
+      {open ? (
+        <div
+          ref={popoverRef}
+          className={`inline-switcher__popover${popoverPlacement?.up ? ' inline-switcher__popover--up' : ''}`}
+          role="menu"
+          data-testid="inline-model-switcher-popover"
+          style={popoverPlacement ? { maxHeight: `${popoverPlacement.maxHeight}px`, overflowY: 'auto' } : undefined}
+        >
+          {compact ? null : (
+          <div className="inline-switcher__row">
+            <span className="inline-switcher__label">
+              {t('inlineSwitcher.modeLabel')}
+            </span>
+            <div className="inline-switcher__seg" role="tablist">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={config.mode === 'daemon'}
+                className={
+                  'inline-switcher__seg-btn' +
+                  (config.mode === 'daemon' ? ' is-active' : '')
+                }
+                data-testid="inline-model-switcher-mode-daemon"
+                disabled={!daemonLive && config.mode !== 'daemon'}
+                onClick={() => {
+                  trackExecutionSettingsPopoverClick(analytics.track, {
+                    page_name: 'home',
+                    area: 'execution_settings_popover',
+                    element: 'mode_local_cli',
+                  });
+                  // Optional-call so a transient Fast Refresh state where a
+                  // parent has not yet re-rendered with the new prop signature
+                  // does not crash the entire entry view. The same defensive
+                  // pattern is applied to every callback below.
+                  onModeChange?.('daemon');
+                  if (!daemonLive) {
+                    setOpen(false);
+                    onOpenSettings?.('execution');
+                  }
+                }}
+                title={
+                  !daemonLive
+                    ? t('inlineSwitcher.daemonOffline')
+                    : t('inlineSwitcher.useCli')
+                }
+              >
+                {t('inlineSwitcher.chipCli')}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={config.mode === 'api'}
+                className={
+                  'inline-switcher__seg-btn' +
+                  (config.mode === 'api' ? ' is-active' : '')
+                }
+                data-testid="inline-model-switcher-mode-api"
+                onClick={() => {
+                  trackExecutionSettingsPopoverClick(analytics.track, {
+                    page_name: 'home',
+                    area: 'execution_settings_popover',
+                    element: 'mode_byok',
+                  });
+                  onModeChange?.('api');
+                }}
+                title={t('inlineSwitcher.useByok')}
+              >
+                {t('inlineSwitcher.chipByok')}
+              </button>
+            </div>
+          </div>
+          )}
+
+          {/* The popover body always reflects the ACTIVE execution mode:
+              `compact` only chooses layout density, never which catalogue is
+              on offer. A BYOK chip therefore always opens onto the BYOK
+              provider's model list (regression: the compact home popover kept
+              listing the local CLI agent's cloud models while the chip showed
+              the BYOK model). */}
+          {config.mode === 'api' ? (
+            <>
+              {compact ? null : (
+              <div className="inline-switcher__row">
+                <span className="inline-switcher__label">
+                  {t('inlineSwitcher.providerLabel')}
+                </span>
+                <div className="inline-switcher__chips" role="tablist">
+                  {API_PROTOCOL_TABS.map((tab) => {
+                    const active = apiProtocol === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={active}
+                        className={
+                          'inline-switcher__chip-tab' +
+                          (active ? ' is-active' : '')
+                        }
+                        data-testid={`inline-model-switcher-provider-${tab.id}`}
+                        onClick={() => {
+                          // Unlike Settings (which skips unmapped protocols),
+                          // report the click even when the protocol has no v2
+                          // provider_id (e.g. aihubmix) — just omit the field.
+                          trackExecutionSettingsPopoverClick(analytics.track, {
+                            page_name: 'home',
+                            area: 'execution_settings_popover',
+                            element: 'byok_provider_tab',
+                            provider_id:
+                              byokProtocolToTracking(tab.id) ?? undefined,
+                          });
+                          onApiProtocolChange?.(tab.id);
+                        }}
+                  
