@@ -1,1 +1,0 @@
-@/tmp/open-design/apps/web/src/components/InlineModelSwitcher.tsx
