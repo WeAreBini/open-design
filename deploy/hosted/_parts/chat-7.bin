@@ -1,0 +1,238 @@
+'generate_image' ? 'image' : fnName === 'generate_video' ? 'video' : 'speech';
+      let args: any = {};
+      try {
+        args = JSON.parse(call.function.arguments || '{}');
+      } catch {
+        return { ok: false, error: 'tool arguments were not valid JSON', kind: toolKind };
+      }
+      if (fnName === 'generate_image') {
+        const result = await opts.runImage(args, toolCtx);
+        return { ...result, kind: 'image' };
+      }
+      if (fnName === 'generate_speech') {
+        const result = await opts.runSpeech(args, toolCtx);
+        return { ...result, kind: 'speech' };
+      }
+      // generate_video — longer (up to 5 min), async-with-polling. Only some
+      // providers expose it (SenseAudio yes, AIHubMix no); without a runner
+      // we surface a clear unsupported error the model can relay.
+      if (!opts.runVideo) {
+        return { ok: false, error: 'video generation is not supported for this provider', kind: 'video' };
+      }
+      const result = await opts.runVideo(args, toolCtx);
+      return { ...result, kind: 'video' };
+    };
+
+    // ---- Anthropic native tool loop (aihubmix claude models) --------------
+    // Mirrors the OpenAI runTurn/loop below but on the Anthropic Messages
+    // wire. One round-trip: stream text deltas, accumulate any `tool_use`
+    // content blocks (id/name from content_block_start, args JSON from
+    // input_json_delta), and report the stop_reason. The shared executeOneTool
+    // backs each tool; results return as `tool_result` blocks next round.
+    const runAnthropicToolTurn = async (
+      sse: any,
+      anthropicUrl: string,
+      headers: Record<string, string>,
+      anthMessages: any[],
+    ): Promise<
+      | { kind: 'text_end' }
+      | { kind: 'error' }
+      | {
+          kind: 'tool_calls';
+          toolCalls: Array<{ id: string; function: { name: string; arguments: string } }>;
+          assistantBlocks: any[];
+        }
+    > => {
+      const payload: any = {
+        ...buildAnthropicChatPayload(model, systemPrompt, anthMessages, maxTokens),
+        tools: openaiToolsToAnthropic(opts.tools),
+        tool_choice: { type: 'auto' },
+      };
+      const response = await fetch(anthropicUrl, {
+        ...toolCtx.requestInit,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify(payload),
+        redirect: 'error',
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(
+          `[${opts.logTag}] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
+        );
+        sendProxyError(sse, `Upstream error: ${response.status}`, {
+          code: proxyErrorCode(response.status),
+          details: errorText,
+          retryable: response.status === 429 || response.status >= 500,
+        });
+        return { kind: 'error' };
+      }
+      // Content blocks accumulate by `index`. text_delta streams to the
+      // client; input_json_delta concatenates the tool args JSON string.
+      const blocks: Record<number, { type: string; id?: string; name?: string; json: string }> = {};
+      let stopReason = '';
+      let providerError = '';
+      const guard = createDeltaGuard(sse);
+      await streamUpstreamSse(response, ({ event, data }: any) => {
+        if (!data) return false;
+        if (event === 'error' || data.type === 'error') {
+          providerError = data.error?.message || data.message || 'Anthropic upstream error';
+          return true;
+        }
+        if (event === 'content_block_start') {
+          const idx = typeof data.index === 'number' ? data.index : 0;
+          const cb = data.content_block || {};
+          blocks[idx] = { type: cb.type || 'text', id: cb.id, name: cb.name, json: '' };
+        } else if (event === 'content_block_delta') {
+          const idx = typeof data.index === 'number' ? data.index : 0;
+          const d = data.delta || {};
+          if (d.type === 'text_delta' && typeof d.text === 'string') {
+            guard.sendDelta(d.text);
+            if (guard.contaminated) {
+              sse.send('end', {});
+              return true;
+            }
+          } else if (d.type === 'input_json_delta' && typeof d.partial_json === 'string') {
+            if (!blocks[idx]) blocks[idx] = { type: 'tool_use', json: '' };
+            blocks[idx]!.json += d.partial_json;
+          }
+        } else if (event === 'message_delta') {
+          if (typeof data.delta?.stop_reason === 'string') stopReason = data.delta.stop_reason;
+        } else if (event === 'message_stop') {
+          return true;
+        }
+        return false;
+      });
+      if (providerError) {
+        sendProxyError(sse, `Provider error: ${providerError}`, { details: providerError });
+        return { kind: 'error' };
+      }
+      const toolBlocks = Object.keys(blocks)
+        .map(Number)
+        .sort((a, b) => a - b)
+        .map((i) => blocks[i]!)
+        .filter((b) => b.type === 'tool_use');
+      if (stopReason === 'tool_use' && toolBlocks.length > 0) {
+        const toolCalls = toolBlocks.map((b, i) => ({
+          id: b.id || `call_${i}`,
+          function: { name: b.name || '', arguments: b.json || '{}' },
+        }));
+        const assistantBlocks = toolBlocks.map((b, i) => {
+          let input: any = {};
+          try {
+            input = JSON.parse(b.json || '{}');
+          } catch {
+            /* keep {} — the executor re-validates args */
+          }
+          return { type: 'tool_use', id: b.id || `call_${i}`, name: b.name || '', input };
+        });
+        return { kind: 'tool_calls', toolCalls, assistantBlocks };
+      }
+      return { kind: 'text_end' };
+    };
+
+    const runAnthropicToolChat = async (
+      res: any,
+      anthropicUrl: string,
+      headers: Record<string, string>,
+    ) => {
+      const sse = createSseResponse(res);
+      let proxyDispatcher: ReturnType<typeof proxyDispatcherRequestInit> | null = null;
+      try {
+        proxyDispatcher = proxyDispatcherRequestInit();
+        const signal = clientDisconnectSignal(res);
+        toolCtx.requestInit = { ...proxyDispatcher.requestInit, signal };
+        sse.send('start', { model });
+        const convMessages: any[] = Array.isArray(messages) ? [...messages] : [];
+        for (let loop = 0; loop < MAX_BYOK_TOOL_LOOPS; loop++) {
+          if (signal.aborted) return sse.end();
+          const turn = await runAnthropicToolTurn(sse, anthropicUrl, headers, convMessages);
+          if (turn.kind === 'error') return sse.end();
+          if (turn.kind === 'text_end') {
+            sse.send('end', {});
+            return sse.end();
+          }
+          // Append the assistant's tool_use turn, then a user turn carrying one
+          // tool_result block per call, then loop so the model can use them.
+          convMessages.push({ role: 'assistant', content: turn.assistantBlocks });
+          const toolResults: any[] = [];
+          for (const call of turn.toolCalls) {
+            if (signal.aborted) return sse.end();
+            const result = await executeOneTool(call);
+            const toolName = call?.function?.name ?? 'unknown';
+            if (result.ok) {
+              console.log(`[${opts.logTag}] ${toolName} OK: ${call.id} → ${result.url}`);
+            } else {
+              console.warn(`[${opts.logTag}] ${toolName} FAILED: ${call.id} — ${result.error}`);
+            }
+            toolResults.push({
+              type: 'tool_result',
+              tool_use_id: call.id,
+              content: buildToolResultContent(result),
+            });
+          }
+          convMessages.push({ role: 'user', content: toolResults });
+        }
+        console.warn(
+          `[${opts.logTag}] anthropic tool loop bounded at MAX_BYOK_TOOL_LOOPS=${MAX_BYOK_TOOL_LOOPS}`,
+        );
+        sse.send('end', {});
+        return sse.end();
+      } catch (err: any) {
+        console.error(`[${opts.logTag}] internal error: ${err.message}`);
+        sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
+        sse.end();
+      } finally {
+        await proxyDispatcher?.close();
+      }
+    };
+
+    // ---- Gemini native tool loop (aihubmix gemini/imagen models) ----------
+    const runGeminiToolTurn = async (
+      sse: any,
+      geminiUrl: string,
+      headers: Record<string, string>,
+      contents: any[],
+    ): Promise<
+      | { kind: 'text_end' }
+      | { kind: 'error' }
+      | {
+          kind: 'tool_calls';
+          toolCalls: Array<{ id: string; function: { name: string; arguments: string } }>;
+          functionCallParts: any[];
+        }
+    > => {
+      const payload: any = {
+        contents,
+        generationConfig: {
+          maxOutputTokens: typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
+        },
+        tools: openaiToolsToGemini(opts.tools),
+      };
+      if (typeof systemPrompt === 'string' && systemPrompt) {
+        payload.systemInstruction = { parts: [{ text: systemPrompt }] };
+      }
+      const response = await fetch(geminiUrl, {
+        ...toolCtx.requestInit,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify(payload),
+        redirect: 'error',
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(
+          `[${opts.logTag}] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
+        );
+        sendProxyError(sse, `Upstream error: ${response.status}`, {
+          code: proxyErrorCode(response.status),
+          details: errorText,
+          retryable: response.status === 429 || response.status >= 500,
+        });
+        return { kind: 'error' };
+      }
+      // Gemini streams candidate parts; a functionCall part usually arrives
+      // whole in one chunk (not char-streamed like text). Collect them.
+      const functionCalls: Array<{ name: string; args: any }> = [];
+      // Keep the RAW functionCall parts verbatim. Gemini 3.x thinking models
+     
