@@ -1,0 +1,251 @@
+    400,
+        'BAD_REQUEST',
+        'apiKey and model are required',
+      );
+    }
+
+    const effectiveBaseUrl = baseUrl || 'https://generativelanguage.googleapis.com';
+    const validated = await validateExternalApiBaseUrl(effectiveBaseUrl);
+    if (validated.error) {
+      return sendApiError(
+        res,
+        validated.forbidden ? 403 : 400,
+        validated.forbidden ? 'FORBIDDEN' : 'BAD_REQUEST',
+        validated.error,
+      );
+    }
+    const reasoningDenial = authorizeReasoningEgress({
+      policy: proxyBody.reasoningExecution,
+      routeKind: 'proxy',
+      provider: 'google',
+      resolvedBaseUrl: effectiveBaseUrl,
+      model,
+    });
+    if (reasoningDenial) return sendReasoningEgressDenial(res, reasoningDenial);
+
+    const url = googleStreamGenerateContentUrl(effectiveBaseUrl, model);
+    console.log(
+      `[proxy:google] ${req.method} ${validated.parsed!.hostname} model=${model}`,
+    );
+
+    return runGeminiChatStream(res, {
+      url,
+      headers: { 'x-goog-api-key': apiKey },
+      payload: buildGeminiChatPayload(systemPrompt, messages, maxTokens),
+      model,
+      logTag: 'proxy:google',
+    });
+  });
+
+  app.post('/api/proxy/ollama/stream', async (req, res) => {
+    const proxyBody = req.body || {};
+    if (rejectProxyPluginContext(proxyBody, res)) return;
+    const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens, projectId } = proxyBody;
+    if (!apiKey || !model) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'apiKey and model are required');
+    }
+    const projectTools = typeof projectId === 'string' && projectId.length > 0;
+    if (projectTools && !isSafeProjectId(projectId)) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'projectId must be a safe identifier');
+    }
+
+    const effectiveBaseUrl = baseUrl || 'https://ollama.com';
+    const validated = await validateExternalApiBaseUrl(effectiveBaseUrl);
+    if (validated.error) {
+      return sendApiError(
+        res,
+        validated.forbidden ? 403 : 400,
+        validated.forbidden ? 'FORBIDDEN' : 'BAD_REQUEST',
+        validated.error,
+      );
+    }
+    const reasoningDenial = authorizeReasoningEgress({
+      policy: proxyBody.reasoningExecution,
+      routeKind: 'proxy',
+      provider: 'ollama',
+      resolvedBaseUrl: effectiveBaseUrl,
+      model,
+    });
+    if (reasoningDenial) return sendReasoningEgressDenial(res, reasoningDenial);
+
+    const clean = effectiveBaseUrl.replace(/\/+$/, '').replace(/\/api\/?$/, '');
+    const url = `${clean}/api/chat`;
+    console.log(`[proxy:ollama] ${req.method} ${validated.parsed!.hostname} model=${model}`);
+
+    const payloadMessages = Array.isArray(messages) ? [...messages] : [];
+    if (typeof systemPrompt === 'string' && systemPrompt) {
+      payloadMessages.unshift({ role: 'system', content: systemPrompt });
+    }
+
+    const sse = createSseResponse(res);
+    let proxyDispatcher: ReturnType<typeof proxyDispatcherRequestInit> | null = null;
+    try {
+      proxyDispatcher = proxyDispatcherRequestInit();
+      const signal = clientDisconnectSignal(res);
+      sse.send('start', { model });
+      const guard = createDeltaGuard(sse);
+      let conversation = payloadMessages;
+      const maxLoops = projectTools ? 8 : 1;
+      for (let loop = 0; loop < maxLoops; loop += 1) {
+        const payload: any = { model, messages: conversation, stream: true };
+        if (typeof maxTokens === 'number' && maxTokens > 0) {
+          payload.options = { num_predict: maxTokens };
+        }
+        if (projectTools) payload.tools = OLLAMA_PROJECT_FILE_TOOLS;
+        const response = await fetch(url, {
+          ...proxyDispatcher.requestInit,
+          signal,
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+          body: JSON.stringify(payload),
+          redirect: 'error',
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`[proxy:ollama] upstream error: ${response.status} ${redactAuthTokens(errorText)}`);
+          sendProxyError(sse, `Upstream error: ${response.status}`, {
+            code: proxyErrorCode(response.status),
+            details: errorText,
+            retryable: response.status === 429 || response.status >= 500,
+          });
+          return sse.end();
+        }
+
+        let assistantMessage: Record<string, unknown> | null = null;
+        let toolCalls = ollamaToolCallsFromMessage(null);
+        let stopForGuard = false;
+        await streamUpstreamNdjson(response, ({ data }: any) => {
+          if (!data) return false;
+          if (data.message && typeof data.message === 'object') {
+            const found = ollamaToolCallsFromMessage(data.message);
+            if (found.length > 0) {
+              toolCalls = found;
+              assistantMessage = data.message;
+            }
+          }
+          const content = data.message?.content;
+          if (typeof content === 'string' && content && toolCalls.length === 0) {
+            guard.sendDelta(content);
+            if (guard.contaminated) {
+              stopForGuard = true;
+              sse.send('end', {});
+              return true;
+            }
+          }
+          return Boolean(data.done);
+        });
+        if (stopForGuard || !projectTools || toolCalls.length === 0) break;
+        const toolMessages = [];
+        for (const call of toolCalls) {
+          const result = await executeOllamaProjectTool(ctx.paths.PROJECTS_DIR, projectId, call);
+          toolMessages.push({ role: 'tool', tool_name: call.name, content: result });
+        }
+        conversation = [
+          ...conversation,
+          assistantMessage ?? { role: 'assistant', content: '', tool_calls: toolCalls },
+          ...toolMessages,
+        ];
+      }
+      if (!guard.contaminated) sse.send('end', {});
+      sse.end();
+    } catch (err: any) {
+      console.error(`[proxy:ollama] internal error: ${err.message}`);
+      sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
+      sse.end();
+    } finally {
+      await proxyDispatcher?.close();
+    }
+  });
+
+  // SenseAudio chat completions. Wire-compatible with OpenAI (POST
+  // /v1/chat/completions, Bearer auth, SSE `data: {...}` + `data: [DONE]`)
+  // plus a daemon-side tool loop: the handler injects an OpenAI
+  // `tools` array on every upstream request and, when the model
+  // responds with a `tool_calls` finish_reason, executes the call
+  // locally, appends the assistant + tool messages to the conversation,
+  // and re-issues the completion. This is how BYOK chat — which has
+  // no agent-runtime scaffolding — gets image-generation parity with
+  // the CLI agent path. Loop is bounded by MAX_BYOK_TOOL_LOOPS so a
+  // misbehaving model can't pin the daemon in an infinite tool dance.
+  const MAX_BYOK_TOOL_LOOPS = 3;
+
+  type AccumulatedToolCall = { id: string; name: string; arguments: string };
+  type TurnResult =
+    | { kind: 'text_end' }
+    | { kind: 'error' }
+    | {
+        kind: 'tool_calls';
+        assistantMessage: any;
+        toolCalls: Array<{ id: string; type: 'function'; function: { name: string; arguments: string } }>;
+      };
+
+  // Shared shape for the two BYOK tool-loop chat proxies (SenseAudio,
+  // AIHubMix). Both speak the OpenAI chat-completions wire and inject a
+  // daemon-side `tools` array; they differ only in default base URL, outbound
+  // headers (AIHubMix carries the APP-Code attribution header), the tool
+  // definitions/allowlist, and which executor backs each tool. Funnelling
+  // both through one factory keeps the tool-loop streaming logic single-source.
+  type ByokToolRunner = (args: any, toolCtx: BYOKToolContext) => Promise<ImageToolResult>;
+  interface ByokToolChatProxyOptions {
+    providerId: string;
+    logTag: string;
+    defaultBaseUrl: string;
+    tools: any[];
+    buildHeaders: (apiKey: string) => Record<string, string>;
+    isImageModel: (value: unknown) => boolean;
+    /** Validates the per-request `byokVideoModel` default before it is fed to
+     *  the `generate_video` tool. Omitted when the provider has no video tool. */
+    isVideoModel?: (value: unknown) => boolean;
+    /** Validates the per-request `byokSpeechModel` default for the speech tool. */
+    isSpeechModel?: (value: unknown) => boolean;
+    runImage: ByokToolRunner;
+    runSpeech: ByokToolRunner;
+    /** Omitted when the provider has no video endpoint (AIHubMix). */
+    runVideo?: ByokToolRunner;
+    /**
+     * AIHubMix only: route by model name to the native protocol wire
+     * (claude → Anthropic /v1/messages, gemini or imagen → Gemini
+     * streamGenerateContent), all on the AIHubMix origin + APP-Code. Those
+     * routes run base chat WITHOUT the tool loop (no in-chat generate_image
+     * yet — the OpenAI family keeps it). When unset/false the provider always
+     * uses the OpenAI tool-loop path (SenseAudio).
+     */
+    routeByModel?: boolean;
+  }
+
+  const registerByokToolChatProxy = (
+    routePath: string,
+    opts: ByokToolChatProxyOptions,
+  ) => {
+   app.post(routePath, async (req, res) => {
+    const proxyBody = req.body || {};
+    if (rejectProxyPluginContext(proxyBody, res)) return;
+    const {
+      baseUrl,
+      apiKey,
+      model,
+      systemPrompt,
+      messages,
+      maxTokens,
+      projectId,
+      byokImageModel,
+      byokVideoModel,
+      byokSpeechModel,
+      byokSpeechVoice,
+    } = proxyBody;
+    if (!apiKey || !model) {
+      return sendApiError(
+        res,
+        400,
+        'BAD_REQUEST',
+        'apiKey and model are required',
+      );
+    }
+    // projectId is required because the BYOK generate_image tool writes
+    // into the active project's folder; without one we'd have to fall
+    // back to a daemon-global cache that orphans the file. The web
+    // client always passes project.id from ProjectView, so a missing
+    // value means the request did not come through the chat surface.
+    if (typeof projectId !== 'string' || !isSafeProjectId(projectId)) {
+    
