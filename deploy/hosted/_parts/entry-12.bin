@@ -1,0 +1,298 @@
+yRef.current = onboardingSessionId
+      ? {
+          token: scanToken,
+          startedAt: Date.now(),
+          onboardingSessionId,
+        }
+      : null;
+    return scanToken;
+  }
+
+  function showCliAgents(
+    token: number,
+    availableAgents: AgentInfo[],
+    options: { stagger: boolean },
+  ): void {
+    if (!options.stagger) {
+      const nextIds = availableAgents.map((agent) => agent.id);
+      setVisibleAgentIds((current) =>
+        current.length === nextIds.length && current.every((id, index) => id === nextIds[index])
+          ? current
+          : nextIds,
+      );
+      return;
+    }
+    availableAgents.forEach((agent, index) => {
+      const timer = setTimeout(() => {
+        if (cliScanTokenRef.current !== token) return;
+        setVisibleAgentIds((current) =>
+          current.includes(agent.id) ? current : [...current, agent.id],
+        );
+        if (index === availableAgents.length - 1) {
+          setCliScanStatus('done');
+        }
+      }, 110 * (index + 1));
+      agentRevealTimersRef.current.push(timer);
+    });
+  }
+
+  function handleBackWithTracking(): void {
+    emitOnboardingClick('back', 'back');
+    clearAgentRevealTimers();
+    setRuntime(null);
+    setStep(runtimeSetupEntry === 'cloud' ? 0 : 1);
+  }
+
+  function completeStreamlinedOnboarding(
+    runtimeType: TrackingOnboardingRuntimeType,
+  ): void {
+    emitOnboardingComplete('completed', 'completed_without_design_system', {
+      runtimeType,
+    });
+    clearOnboardingSessionId();
+    onFinish();
+  }
+
+  function continueAfterCloudSignIn(): void {
+    if (config.onboardingCompleted === true && hasRestorableModelSourceConfig) {
+      if (passiveReauthCompletedRef.current) return;
+      passiveReauthCompletedRef.current = true;
+      clearOnboardingSessionId();
+      onFinish();
+      return;
+    }
+    setStep(1);
+  }
+
+  function startHydratedAmrLoginPoll(): void {
+    if (amrHydratedLoginPollStartedRef.current) return;
+    amrHydratedLoginPollStartedRef.current = true;
+    amrLoginPollCancelledRef.current = false;
+    setAmrLoginPending(true);
+    void pollAmrLoginCompletion()
+      .then((completed) => {
+        if (
+          completed
+          && onboardingMountedRef.current
+          && cloudLandingIntentStillCurrent()
+        ) {
+          continueAfterCloudSignIn();
+        }
+      })
+      .finally(() => {
+        if (onboardingMountedRef.current) {
+          setAmrLoginPending(false);
+        }
+      });
+  }
+
+  function handleModelSourceKeyDown(
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+    currentSource: 'amr' | 'local' | 'byok',
+  ): void {
+    const sources = ['amr', 'local', 'byok'] as const;
+    const currentIndex = sources.indexOf(currentSource);
+    let nextIndex: number | null = null;
+
+    if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
+      nextIndex = (currentIndex + 1) % sources.length;
+    } else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
+      nextIndex = (currentIndex - 1 + sources.length) % sources.length;
+    } else if (event.key === 'Home') {
+      nextIndex = 0;
+    } else if (event.key === 'End') {
+      nextIndex = sources.length - 1;
+    }
+
+    if (nextIndex === null) return;
+    event.preventDefault();
+    const nextSource = sources[nextIndex];
+    if (!nextSource) return;
+    setModelSource(nextSource);
+    modelSourceOptionRefs.current[nextSource]?.focus();
+  }
+
+  function continueWithModelSource(): void {
+    if (modelSource === 'amr') {
+      emitOnboardingClick('amr_cloud', 'select_runtime', {
+        runtime_type: 'amr_cloud',
+        is_recommended: true,
+      });
+      setRuntime('amr');
+      onModeChange('daemon');
+      onAgentChange('amr');
+      completeStreamlinedOnboarding('amr_cloud');
+      return;
+    }
+
+    if (modelSource === 'local') {
+      emitOnboardingClick('local_coding_agent', 'select_runtime', {
+        runtime_type: 'local_cli',
+      });
+      setRuntime('local');
+      setRuntimeSetupEntry('chooser');
+      void scanCliAgents({ preferExisting: true });
+      setStep(2);
+      return;
+    }
+
+    emitOnboardingClick('byok', 'select_runtime', { runtime_type: 'byok' });
+    setRuntime('byok');
+    setRuntimeSetupEntry('chooser');
+    setStep(2);
+  }
+  /**
+   * Whether the Continue attempt that started against `startedInputKey` still
+   * describes what the user is looking at.
+   *
+   * A validation round trip can outlive the intent that started it: Back stays
+   * enabled while the test is in flight, and the inputs being validated stay
+   * editable. Persisting a late result regardless would write a configuration
+   * the user already walked away from and finish onboarding under them — so
+   * the attempt must still be on the runtime setup step, on the same runtime,
+   * and against the same inputs it validated.
+   *
+   * `inputKey` already guards what gets DISPLAYED (`visibleAgentTestState` /
+   * `visibleProviderTestState` fall back to idle once it drifts); this applies
+   * the same rule to what gets PERSISTED.
+   */
+  function continueAttemptStillCurrent(
+    startedRuntime: 'local' | 'byok',
+    startedInputKey: string,
+  ): boolean {
+    const now = onboardingIntentRef.current;
+    if (now.step !== 2 || now.runtime !== startedRuntime) return false;
+    return startedRuntime === 'local'
+      ? now.agentTestInputKey === startedInputKey
+      : now.providerTestInputKey === startedInputKey;
+  }
+
+  /**
+   * The already-validated result for what the user is looking at, or null when
+   * Continue still has to prove the runtime itself.
+   *
+   * The background pass usually has an answer waiting by the time Continue is
+   * pressed; taking it here is what keeps the click instant instead of paying
+   * for another agent spawn.
+   */
+  function settledRuntimeValidation(
+    state: OnboardingRuntimeTestState,
+  ): ConnectionTestResponse | null {
+    return state.status === 'done' && state.result.ok ? state.result : null;
+  }
+
+  /**
+   * Wait out a validation the user is actively blocked on, with the button
+   * showing it.
+   *
+   * A background pass runs on its own and must leave Continue pressable, so
+   * only the wait a click actually owns is allowed to make the button busy.
+   */
+  async function awaitRuntimeValidation(
+    validate: () => Promise<ConnectionTestResponse | null>,
+  ): Promise<ConnectionTestResponse | null> {
+    setContinuePending(true);
+    try {
+      return await validate();
+    } finally {
+      setContinuePending(false);
+    }
+  }
+
+  async function handlePrimaryAction() {
+    if (connectStepBlocked || continuePending) return;
+    if (runtime === 'local' && selectedAgent) {
+      const startedInputKey = agentTestInputKey;
+      const testResult =
+        settledRuntimeValidation(visibleAgentTestState)
+        ?? (await awaitRuntimeValidation(testAgentInline));
+      if (!testResult?.ok) return;
+      if (!continueAttemptStillCurrent('local', startedInputKey)) return;
+      await onConfigPersist({
+        ...config,
+        mode: 'daemon',
+        agentId: selectedAgent.id,
+      });
+      emitOnboardingClick('continue', 'continue', { runtime_type: 'local_cli' });
+      completeStreamlinedOnboarding('local_cli');
+      return;
+    }
+    if (runtime === 'byok') {
+      const startedInputKey = providerTestInputKey;
+      const testResult =
+        settledRuntimeValidation(visibleProviderTestState)
+        ?? (await awaitRuntimeValidation(testProviderInline));
+      if (!testResult?.ok) return;
+      if (!continueAttemptStillCurrent('byok', startedInputKey)) return;
+      await onConfigPersist({ ...config, mode: 'api' });
+      emitOnboardingClick('continue', 'continue', { runtime_type: 'byok' });
+      completeStreamlinedOnboarding('byok');
+      return;
+    }
+  }
+
+  // Cloud login establishes identity only. The model source is deliberately
+  // chosen on the following screen so signing in never overwrites a restored
+  // Local/BYOK configuration.
+  async function handleCloudSignIn() {
+    if (amrLoginBusy || amrLoginCancelPending) return;
+    const cardAttribution = recordAmrEntry(
+      analytics.track,
+      'onboarding_amr_card',
+      new Date(),
+      { metricsConsent: config.telemetry?.metrics === true },
+    );
+    const attribution = recordAmrEntry(
+      analytics.track,
+      'onboarding_amr_sign_in_continue',
+      new Date(),
+      {
+        metricsConsent: config.telemetry?.metrics === true,
+        reuseExistingFrom: ['onboarding_amr_card'],
+      },
+    ) ?? cardAttribution;
+    await handleAmrSignInToContinue(attribution);
+  }
+
+  async function handleAmrSignInToContinue(
+    attribution?: AmrEntryAttribution | null,
+  ) {
+    if (amrLoginBusy || amrLoginCancelPending) return;
+    amrLoginPollCancelledRef.current = false;
+    amrLoginCancelRequestedRef.current = false;
+    setAmrLoginError(null);
+    setAmrLoginPending(true);
+    try {
+      const currentStatus = await fetchVelaLoginStatus();
+      if (amrLoginPollCancelledRef.current) return;
+      if (currentStatus) {
+        setAmrStatus(currentStatus);
+        onAmrLoginStatusChange?.(currentStatus);
+      }
+      if (isAmrSessionAuthenticated(currentStatus)) {
+        continueAfterCloudSignIn();
+        return;
+      }
+      if (amrLoginPollCancelledRef.current) return;
+      const provisionalAuthAttemptId = beginAmrAuthTracking(
+        attribution,
+        Date.now(),
+      );
+      amrAuthAttemptIdRef.current = provisionalAuthAttemptId;
+      const odDeviceId = amrHandoffDeviceId({
+        metricsConsent: config.telemetry?.metrics === true,
+        resolvedDeviceId: getResolvedDeviceId(),
+        installationId: config.installationId,
+      });
+      amrLoginStartPendingRef.current = true;
+      const loginResult = await startVelaLogin(
+        attribution,
+        odDeviceId,
+        provisionalAuthAttemptId,
+      ).finally(() => {
+        amrLoginStartPendingRef.current = false;
+      });
+      const authAttemptId = reconcileAmrAuthAttemptId(
+        provisionalAuthAttemptId,
+        loginResult.authAttemptId,
+        { joined
