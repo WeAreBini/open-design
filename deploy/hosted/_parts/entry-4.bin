@@ -1,0 +1,221 @@
+ing the page from the rail opens 最近浏览过 (the Demo's strip
+    // remounts on every visit, so it never carries a tab over); the legacy
+    // `/all-projects` view is the one deep link that lands on 团队项目.
+    if (view === 'all-projects') setProjectsCollection('teamProjects');
+    else if (view === 'drafts') setProjectsCollection('recent');
+  }, [view]);
+  async function handleOpenAllProjects(id: string): Promise<boolean> {
+    // The grid already reconciled the local row with the authoritative team
+    // catalog (notably the owner's current project name). Carry its title and
+    // provenance into App before navigation. Passing only the id made App reopen its local
+    // SQLite placeholder ("共享项目"), throwing away data already visible on the
+    // list and leaving the project header stale until a later metadata event.
+    const projectName = allProjectsList.find((project) => project.id === id)?.name.trim();
+    const teamProject = teamProjects.projects.find((project) => project.projectId === id);
+    const localProject = projects.find((project) => project.id === id);
+    const projectTitleHint = projectName
+      ? {
+          name: projectName,
+          workspaceId: workspaceContext?.workspaceId ?? null,
+          workspaceMemberId: workspaceContext?.workspaceMemberId ?? null,
+          // A member must render the owner's catalog title even when their
+          // local mirror has a newer timestamp or an older non-placeholder
+          // title. The owner may rename locally before the catalog catches up.
+          authoritative: Boolean(
+            teamProject
+            && teamProject.ownerMemberId !== workspaceContext?.workspaceMemberId,
+          ),
+        }
+      : undefined;
+    const open = () => Promise.resolve(onOpenProject(id, undefined, projectTitleHint));
+    if (contentReadyProjectIdsRef.current.has(id)) {
+      await open();
+      return true;
+    }
+    const scopeKey = contentReadyScopeKeyRef.current;
+    const hydration = scopeKey
+      ? contentReadyHydrationRef.current.get(`${scopeKey}:${id}`)
+      : null;
+    if (hydration) {
+      const hydrated = await hydration;
+      if (hydrated) {
+        await open();
+        return true;
+      }
+      if (contentReadyScopeKeyRef.current !== scopeKey) return false;
+    }
+    // The daemon explicitly stamps the local row created by a first Team
+    // status read as a placeholder. Hydrate only that stamped row before
+    // navigation; a normal local Team row is already materialized and must
+    // keep its direct-open path (including unpublished owner changes).
+    if (
+      localProject?.metadata?.sharedProjectPlaceholderAt != null
+      && teamProject
+      && workspaceContext?.workspaceType === 'team'
+      && workspaceContext.workspaceId
+      && workspaceContext.workspaceMemberId
+      && onTeamProjectContentReady
+    ) {
+      const hydrated = await acceptContentReadyProject(
+        id,
+        workspaceContext.workspaceId,
+        workspaceContext.workspaceMemberId,
+      );
+      if (hydrated) {
+        await open();
+        return true;
+      }
+    } else if (localProjectIds.has(id)) {
+      await open();
+      return true;
+    }
+    // Keep the card busy only for the short authority/bootstrap round trip, not
+    // for the full content transfer. PUT is idempotent, so the sidecar may safely
+    // replay it after a reused keep-alive socket resets. A paired older daemon
+    // has no bootstrap route; retain the former blocking POST fallback for that
+    // compatibility case.
+    if (pullingProjectId) return false;
+    const pullRead = beginWorkspaceScopedRead(workspaceContextRef.current);
+    if (!pullRead.context) return false;
+    setPullingProjectId(id);
+    try {
+      const collabRoute = `/api/projects/${encodeURIComponent(id)}/collab`;
+      let response = await fetch(`${collabRoute}/bootstrap`, {
+        method: 'PUT',
+        headers: workspaceProjectHeaders(pullRead.context),
+      });
+      if (response.status === 404 || response.status === 405) {
+        response = await fetch(`${collabRoute}/pull`, {
+          method: 'POST',
+          headers: workspaceProjectHeaders(pullRead.context),
+        });
+      }
+      if (!pullRead.isStillCurrent(workspaceContextRef.current)) return false;
+      if (!response.ok) return false;
+      invalidateProjectFilesCache(id, pullRead.context);
+      // The exact route bootstrap and ambient list refresh are independent.
+      // Navigation may read the newly committed placeholder immediately while
+      // the shell refreshes its catalog in parallel.
+      void Promise.resolve(onProjectsRefresh?.());
+    } catch {
+      return false;
+    } finally {
+      setPullingProjectId(null);
+    }
+    await open();
+    return true;
+  }
+  // Workspace-only destinations. Personal and team workspaces both use these;
+  // signed-out/local state falls back to home once the context has resolved.
+  // `community` is allowed in both states, so it is not guarded, and neither
+  // is `drafts` any more (OPEND-3140): without a workspace it is the local
+  // project list — `buildDraftsList` folds to every local project — and the
+  // rail's 项目 item opens it on both branches.
+  const isWorkspaceOnlyView =
+    view === 'all-projects' ||
+    view === 'members' ||
+    view === 'board' ||
+    view === 'workspace-settings';
+  useEffect(() => {
+    if (workspaceLoading) return;
+    if (isWorkspaceOnlyView && !hasWorkspaceContext) {
+      navigate({ kind: 'home', view: 'home' }, { replace: true });
+    }
+  }, [workspaceLoading, isWorkspaceOnlyView, hasWorkspaceContext]);
+  const [newProjectOpen, setNewProjectOpen] = useState(false);
+  // Home has NO low-balance surface, and since T66 (product 2026-09-07) neither
+  // does anywhere else: a positive balance produces nothing at all and the run
+  // just starts. Home reached that end state first — ruling 2026-09-06 (T53),
+  // "什么都不显示,有余额就允许运行" — and the project page has now been pulled
+  // level with it, so `handlePluginLoopSubmit` having no low-balance branch is
+  // simply the shape of the gate: there is no such result kind to handle.
+  // The entry nav rail is collapsed by default (Manus-style) so the entry
+  // view opens clean and full-width; the panel toggle in the topbar opens it
+  // as an overlay that dismisses on selection / backdrop click / Escape.
+  // Its open/collapsed state is persisted (localStorage) so it survives a
+  // home -> project -> home round trip (EntryShell unmounts on the project
+  // route) and a reload, instead of snapping back to collapsed.
+  const [railOpen, setRailOpen] = useState<boolean>(readStoredRailOpen);
+  const [projectSearchOpen, setProjectSearchOpen] = useState(false);
+
+  // ⌘K / Ctrl+K opens the project search palette — same as clicking the rail
+  // search box. ⌘B / Ctrl+B toggles the nav rail — same as the pinned Home
+  // tab's sidebar toggle.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target;
+      if (
+        event.isComposing
+        || (
+          target instanceof Element
+          && target.closest(
+            'input, textarea, select, [contenteditable]:not([contenteditable="false"])',
+          )
+        )
+      ) {
+        return;
+      }
+      if ((event.metaKey || event.ctrlKey) && (event.key === 'k' || event.key === 'K')) {
+        event.preventDefault();
+        setProjectSearchOpen(true);
+        return;
+      }
+      const primary = isMacPlatform()
+        ? event.metaKey && !event.ctrlKey
+        : event.ctrlKey && !event.metaKey;
+      if (
+        primary &&
+        !event.altKey &&
+        !event.shiftKey &&
+        (event.key === 'b' || event.key === 'B')
+      ) {
+        event.preventDefault();
+        setRailOpen((v) => !v);
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
+  useEffect(() => {
+    writeStoredRailOpen(railOpen);
+    // Broadcast the state so chrome outside this tree (the pinned Home tab's
+    // sidebar toggle) can mirror it via aria-expanded.
+    window.dispatchEvent(
+      new CustomEvent(ENTRY_RAIL_STATE_EVENT, { detail: { open: railOpen } }),
+    );
+  }, [railOpen]);
+
+  // The pinned Home tab (WorkspaceTabsBar) carries a sidebar toggle; it lives
+  // in a sibling tree, so the request arrives as a window event.
+  useEffect(() => {
+    const onToggle = () => setRailOpen((v) => !v);
+    window.addEventListener(ENTRY_RAIL_TOGGLE_EVENT, onToggle);
+    return () => window.removeEventListener(ENTRY_RAIL_TOGGLE_EVENT, onToggle);
+  }, []);
+  // Same story for the search button, which sits in that chrome row beside the
+  // rail toggle (per product: 搜索和收起跟 home icon 一起放在顶部) while the
+  // palette it opens is owned here.
+  useEffect(() => {
+    const onOpen = () => setProjectSearchOpen(true);
+    window.addEventListener(ENTRY_SEARCH_OPEN_EVENT, onOpen);
+    return () => window.removeEventListener(ENTRY_SEARCH_OPEN_EVENT, onOpen);
+  }, []);
+  const [localProviderModelsCache, setLocalProviderModelsCache] =
+    useState<ProviderModelsCache>({});
+  const hasSharedProviderModelsCache =
+    Boolean(sharedProviderModelsCache) && Boolean(onProviderModelsCacheChange);
+  const activeProviderModelsCache =
+    hasSharedProviderModelsCache
+      ? sharedProviderModelsCache!
+      : localProviderModelsCache;
+  const activeSetProviderModelsCache =
+    hasSharedProviderModelsCache
+      ? onProviderModelsCacheChange!
+      : setLocalProviderModelsCache;
+  const [newProjectInitialTab, setNewProjectInitialTab] =
+    useState<CreateTab>('prototype');
+  const [integrationTab, setIntegrationTab] = useState<IntegrationTab>(integrationInitialTab);
+  // Lazy initializer, so a handoff published by a surface that then navigated
+  // here — the `/marketplace/<id>` detail route, which `App` renders outside
+  // this shell — is claimed on the very first render and reaches HomeView in
+  //
