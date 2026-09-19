@@ -1,0 +1,266 @@
+ sub-path                         → no inject              (api.deepinfra.com/v1/openai, openrouter.ai/api/v1)
+    //   non-versioned compat sub-path        → /v1/<route>            (api.deepseek.com/anthropic, api.minimax.io/anthropic)
+    // Previously the check was end-of-path only, which broke the
+    // /v1/openai sub-path case. A naive "non-empty path → respect"
+    // would break the /anthropic sub-path case. Matching `/vN` as a
+    // segment anywhere in the path threads both correctly.
+    url.pathname = /\/v\d+(\/|$)/.test(trimmed)
+      ? `${trimmed}${path}`
+      : `${trimmed}/v1${path}`;
+    return url.toString();
+  };
+
+  const collectSseFrame = (frame: string) => {
+    const lines = frame.replace(/\r/g, '').split('\n');
+    const dataLines = [];
+    let event = 'message';
+    for (const line of lines) {
+      if (line.startsWith('event:')) {
+        event = line.slice(6).trim();
+        continue;
+      }
+      if (!line.startsWith('data:')) continue;
+      let value = line.slice(5);
+      if (value.startsWith(' ')) value = value.slice(1);
+      dataLines.push(value);
+    }
+    const payload = dataLines.join('\n');
+    if (!payload) return { event, payload: '', data: null };
+    if (payload === '[DONE]') return { event, payload, data: null };
+    try {
+      return { event, payload, data: JSON.parse(payload) };
+    } catch {
+      return { event, payload, data: null };
+    }
+  };
+
+  const streamUpstreamSse = async (response: any, onFrame: any) => {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      while (true) {
+        const match = buffer.match(/\r?\n\r?\n/);
+        if (!match || match.index === undefined) break;
+        const frame = buffer.slice(0, match.index);
+        buffer = buffer.slice(match.index + match[0].length);
+        if (await onFrame(collectSseFrame(frame))) {
+          // Fire-and-forget cancel: awaiting hangs on some response-stream
+          // implementations (notably Response built from Uint8Array body,
+          // exposed by tests/proxy-routes.test.ts ollama case where the
+          // mock body's tee'd cancel() never resolves). The cancel signal
+          // is a hint; we're already returning from the function, so we
+          // don't gain anything by blocking on it.
+          void reader.cancel().catch(() => {});
+          return;
+        }
+      }
+    }
+
+    const tail = buffer.trim();
+    if (tail) await onFrame(collectSseFrame(tail));
+  };
+
+  const streamUpstreamNdjson = async (response: any, onFrame: any) => {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      let newline = buffer.indexOf('\n');
+      while (newline !== -1) {
+        const line = buffer.slice(0, newline).trim();
+        buffer = buffer.slice(newline + 1);
+        newline = buffer.indexOf('\n');
+        if (!line) continue;
+        try {
+          const data = JSON.parse(line);
+          if (await onFrame({ data })) {
+            // See note in streamUpstreamSse — fire-and-forget cancel.
+            void reader.cancel().catch(() => {});
+            return;
+          }
+        } catch {
+          // Ignore malformed provider keepalive lines.
+        }
+      }
+    }
+
+    const tail = buffer.trim();
+    if (tail) {
+      try {
+        const data = JSON.parse(tail);
+        await onFrame({ data });
+      } catch {
+        // Ignore malformed provider tail data.
+      }
+    }
+  };
+
+  const extractOpenAIText = (data: any) => {
+    const choices = data?.choices;
+    if (!Array.isArray(choices) || choices.length === 0) return '';
+    const first = choices[0];
+    if (typeof first?.delta?.content === 'string') return first.delta.content;
+    if (typeof first?.text === 'string') return first.text;
+    return '';
+  };
+
+  const extractStreamErrorMessage = (data: any) => {
+    const err = data?.error;
+    if (!err) return '';
+    if (typeof err === 'string') return err;
+    if (typeof err?.message === 'string') return err.message;
+    try {
+      return JSON.stringify(err);
+    } catch {
+      return 'unspecified provider error';
+    }
+  };
+
+  const extractGeminiText = (data: any) => {
+    const candidates = data?.candidates;
+    if (!Array.isArray(candidates) || candidates.length === 0) return '';
+    const parts = candidates[0]?.content?.parts;
+    if (!Array.isArray(parts)) return '';
+    return parts.map((part) => part?.text).filter((text) => typeof text === 'string').join('');
+  };
+
+  const benignGeminiFinishReasons = new Set(['', 'STOP', 'MAX_TOKENS', 'FINISH_REASON_UNSPECIFIED']);
+  const extractGeminiBlockMessage = (data: any) => {
+    const feedback = data?.promptFeedback;
+    if (typeof feedback?.blockReason === 'string' && feedback.blockReason) {
+      const tail = typeof feedback.blockReasonMessage === 'string' && feedback.blockReasonMessage
+        ? ` — ${feedback.blockReasonMessage}`
+        : '';
+      return `Gemini blocked the prompt (${feedback.blockReason})${tail}.`;
+    }
+    const candidates = data?.candidates;
+    if (!Array.isArray(candidates)) return '';
+    for (const candidate of candidates) {
+      const reason = candidate?.finishReason;
+      if (typeof reason !== 'string' || benignGeminiFinishReasons.has(reason)) continue;
+      const tail = typeof candidate?.finishMessage === 'string' && candidate.finishMessage
+        ? ` — ${candidate.finishMessage}`
+        : '';
+      return `Gemini stopped the response (${reason})${tail}.`;
+    }
+    return '';
+  };
+
+  // Per-request role-marker guard for BYOK proxy streams (#3247).
+  function createDeltaGuard(sse: any) {
+    const guard = createRoleMarkerGuard('proxy');
+    return {
+      sendDelta(text: string) {
+        if (guard.contaminated || !text) return;
+        const safe = guard.feedText(text);
+        if (safe.length > 0) {
+          sse.send('delta', { delta: safe });
+        }
+        if (guard.contaminated) {
+          const warn = guard.warningEvent();
+          const markerText = warn?.marker ?? '## user';
+          sse.send('delta', {
+            delta: `\n\n---\n⚠️ **Security warning:** The model attempted to emit a fabricated role marker (\`${markerText}\`). Response was truncated to prevent unauthorized instruction injection. See issue #3247.\n`,
+          });
+        }
+      },
+      get contaminated() { 
+        return guard.contaminated; 
+      },
+    };
+  }
+
+  // ---- Reusable base-chat streamers (text only — no tool loop) -------------
+  // Both the native /api/proxy/{anthropic,google}/stream routes AND the
+  // AIHubMix model-routed proxy call these. Only the resolved url + headers
+  // differ (AIHubMix adds the APP-Code header and a different origin), so the
+  // wire/SSE handling lives here once. The OpenAI tool loop stays in
+  // registerByokToolChatProxy.
+
+  const buildAnthropicChatPayload = (
+    model: string,
+    systemPrompt: unknown,
+    messages: unknown,
+    maxTokens: unknown,
+  ) => {
+    const payload: any = {
+      model,
+      max_tokens:
+        typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
+      messages: Array.isArray(messages) ? messages : [],
+      stream: true,
+    };
+    if (typeof systemPrompt === 'string' && systemPrompt) {
+      payload.system = systemPrompt;
+    }
+    return payload;
+  };
+
+  // A BYOK proxy stream must unwind when the client disconnects (Stop or a
+  // closed tab); otherwise the upstream completion — and any tool loop that
+  // would fire further paid image/video/speech rounds — keeps streaming and
+  // billing after the user is gone. Every upstream fetch below carries this
+  // signal. Mirrors the AbortController wiring already used by
+  // `/api/provider/models` and `/api/test/connection`.
+  const clientDisconnectSignal = (res: any, req?: any): AbortSignal => {
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    res.on('close', abort);
+    if (req) req.on('close', abort);
+    return controller.signal;
+  };
+
+  const runAnthropicChatStream = async (
+    res: any,
+    opts: { url: string; headers: Record<string, string>; payload: any; logTag: string },
+  ) => {
+    const sse = createSseResponse(res);
+    let proxyDispatcher: ReturnType<typeof proxyDispatcherRequestInit> | null = null;
+    try {
+      proxyDispatcher = proxyDispatcherRequestInit();
+      const signal = clientDisconnectSignal(res);
+      sse.send('start', { model: opts.payload?.model });
+      const response = await fetch(opts.url, {
+        ...proxyDispatcher.requestInit,
+        signal,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...opts.headers },
+        body: JSON.stringify(opts.payload),
+        redirect: 'error',
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(
+          `[${opts.logTag}] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
+        );
+        sendProxyError(sse, `Upstream error: ${response.status}`, {
+          code: proxyErrorCode(response.status),
+          details: errorText,
+          retryable: response.status === 429 || response.status >= 500,
+        });
+        return sse.end();
+      }
+
+      let ended = false;
+      const guard = createDeltaGuard(sse);
+      await streamUpstreamSse(response, ({ event, data }: any) => {
+        if (!data) return false;
+        if (event === 'error' || data.type === 'error') {
+          const message = data.error?.message || data.message || 'Anthropic upstream error';
+          sendProxyError(sse, message, { details: data });
+          ended = true;
+          return true;
+        }
+        if (event === 'content_block_delta' && typeo
