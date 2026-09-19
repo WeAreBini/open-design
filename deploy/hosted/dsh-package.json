@@ -1,0 +1,7 @@
+{
+  "name": "hosted-dsh",
+  "private": true,
+  "dependencies": {
+    "@deepseek-ai/dsh": "0.1.1-rc.2"
+  }
+}
