@@ -1,0 +1,49 @@
+name: Join hosted source parts
+
+on:
+  push:
+    branches:
+      - cursor/hosted-image-harness-88c7
+    paths:
+      - .github/workflows/join-hosted-source-parts.yml
+
+permissions:
+  contents: write
+
+jobs:
+  join:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cursor/hosted-image-harness-88c7
+          persist-credentials: true
+      - name: Join the inline model switcher
+        run: |
+          python3 << 'PY'
+          import hashlib
+          import pathlib
+          import subprocess
+          parts = []
+          for index in range(8):
+              blob = subprocess.check_output([
+                  "git", "cat-file", "blob",
+                  f"HEAD:deploy/hosted/_parts/switcher-{index}.bin",
+              ])
+              parts.append(blob)
+          data = b"".join(parts)
+          digest = hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest()
+          expected = "16886dc53ac5882faacedebf570bfd1329137ab7"
+          if digest != expected:
+              raise SystemExit(f"blob mismatch {digest} != {expected} len={len(data)}")
+          dest = pathlib.Path("apps/web/src/components/InlineModelSwitcher.tsx")
+          dest.write_bytes(data)
+          print("joined", digest, len(data))
+          PY
+          git rm -f deploy/hosted/_parts/switcher-0.bin deploy/hosted/_parts/switcher-1.bin deploy/hosted/_parts/switcher-2.bin deploy/hosted/_parts/switcher-3.bin deploy/hosted/_parts/switcher-4.bin deploy/hosted/_parts/switcher-5.bin deploy/hosted/_parts/switcher-6.bin deploy/hosted/_parts/switcher-7.bin
+          git rm -f .github/workflows/join-hosted-source-parts.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/web/src/components/InlineModelSwitcher.tsx
+          git commit -m "Replace the inline model switcher with the disk file."
+          git push origin HEAD:cursor/hosted-image-harness-88c7
