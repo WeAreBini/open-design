@@ -2349,10 +2349,10 @@ function OnboardingView({
     Boolean(config.apiKey.trim()) &&
     Boolean(config.baseUrl.trim()) &&
     Boolean(config.model.trim());
+  // We Are Bini change. Apache License 2.0. Ollama Cloud can load the live model list.
   const canFetchProviderModels =
     apiProtocol !== 'azure' &&
-    apiProtocol !== 'ollama' &&
-    Boolean(config.apiKey.trim()) &&
+    (apiProtocol === 'ollama' || Boolean(config.apiKey.trim())) &&
     Boolean(config.baseUrl.trim()) &&
     isLikelyHttpUrl(config.baseUrl);
   const visibleProviderTestState =
