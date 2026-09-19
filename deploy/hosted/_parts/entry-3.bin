@@ -1,0 +1,246 @@
+全部项目" grid is the SAME project-card grid used everywhere; its
+  // membership rule lives in `buildAllProjectsList`. Rows flow through
+  // `RecentProjectsStrip` like any other card — no custom section.
+  const localProjectIds = new Set(projects.map((project) => project.id));
+  // The optimistic share layer lives HERE, above every project strip, because a
+  // share has to move TWO things at once: the card's 共享 badge and which grid
+  // the card sits in. It used to live inside `RecentProjectsStrip`, so the badge
+  // flipped on click while 草稿 kept the card until the next team-projects poll
+  // (acceptance: 「转入团队空间, 怎么还显示在草稿里…切到全部项目再切回草稿它才消失」).
+  const [sharedThisSession, setSharedThisSession] = useState<ReadonlySet<string>>(
+    () => new Set<string>(),
+  );
+  const [unsharedThisSession, setUnsharedThisSession] = useState<ReadonlySet<string>>(
+    () => new Set<string>(),
+  );
+  const optimisticOwnershipScopeKey = optimisticProjectOwnershipScopeKey(
+    workspaceContext,
+    currentWorkspaceAccountGeneration(),
+  );
+  const [optimisticOwnershipWitnesses, setOptimisticOwnershipWitnesses] = useState<
+    OptimisticProjectOwnershipWitnesses
+  >(() => new Map());
+  const markProjectShared = useCallback((project: WorkspaceProjectSummary) => {
+    setSharedThisSession((prev) => new Set(prev).add(project.id));
+    setUnsharedThisSession((prev) => {
+      const next = new Set(prev);
+      next.delete(project.id);
+      return next;
+    });
+    setOptimisticOwnershipWitnesses((prev) => recordOptimisticProjectOwnership(prev, {
+      scopeKey: optimisticOwnershipScopeKey,
+      context: workspaceContext,
+      project,
+    }));
+  }, [optimisticOwnershipScopeKey, workspaceContext]);
+  const markProjectShareFailed = useCallback((projectId: string) => {
+    setSharedThisSession((prev) => {
+      if (!prev.has(projectId)) return prev;
+      const next = new Set(prev);
+      next.delete(projectId);
+      return next;
+    });
+    setOptimisticOwnershipWitnesses((prev) =>
+      forgetOptimisticProjectOwnership(prev, projectId));
+  }, []);
+  const markProjectUnshared = useCallback((projectId: string) => {
+    setUnsharedThisSession((prev) => new Set(prev).add(projectId));
+    setSharedThisSession((prev) => {
+      const next = new Set(prev);
+      next.delete(projectId);
+      return next;
+    });
+    setOptimisticOwnershipWitnesses((prev) =>
+      forgetOptimisticProjectOwnership(prev, projectId));
+  }, []);
+  useEffect(() => {
+    setOptimisticOwnershipWitnesses((prev) => reconcileOptimisticProjectOwnership(prev, {
+      scopeKey: optimisticOwnershipScopeKey,
+      teamProjects: teamProjects.projects,
+    }));
+    const catalogProjectIds = new Set(
+      teamProjects.projects.map((project) => project.projectId),
+    );
+    setSharedThisSession((prev) => {
+      if (![...prev].some((projectId) => catalogProjectIds.has(projectId))) return prev;
+      return new Set([...prev].filter((projectId) => !catalogProjectIds.has(projectId)));
+    });
+  }, [optimisticOwnershipScopeKey, teamProjects.projects]);
+  // The single shared-state answer, handed to the grids AND to every strip.
+  const isSharedProject = useMemo(
+    () =>
+      createSharedProjectPredicate({
+        teamProjects: teamProjects.projects,
+        localProjects: projects,
+        workspaceContext,
+        sharedThisSession,
+        unsharedThisSession,
+      }),
+    [projects, teamProjects.projects, workspaceContext, sharedThisSession, unsharedThisSession],
+  );
+  // 草稿 is the complement of 全部项目: sharing moves a project from one to the
+  // other, so a shared project must stop appearing here (acceptance #78).
+  const draftProjectsList: Project[] = buildDraftsList({
+    projects,
+    teamProjects: teamProjects.projects,
+    workspaceContext,
+    isShared: isSharedProject,
+  });
+  const allProjectsList: Project[] = buildAllProjectsList({
+    projects,
+    teamProjects: teamProjects.projects,
+    workspaceContext,
+    sharedFallbackName: t('recentProjects.sharedProjectFallbackName'),
+    isShared: isSharedProject,
+  });
+  const projectSearchProjects = buildProjectSearchCatalog(draftProjectsList, allProjectsList);
+  const homeProjectsList = useMemo(
+    () => reconcileSharedProjectCatalogFields({
+      projects,
+      teamProjects: teamProjects.projects,
+      workspaceContext,
+    }),
+    [projects, teamProjects.projects, workspaceContext],
+  );
+  // projectId → sharing member id, so a card in the 全部项目 / 草稿 grids can
+  // resolve "{creator}创建" against the member directory. A project absent here
+  // is the member's own local project → "我创建".
+  const teamProjectOwnerMemberIds = useMemo(
+    () => projectOwnerMemberIdsWithOptimisticWitnesses({
+      scopeKey: optimisticOwnershipScopeKey,
+      teamProjects: teamProjects.projects,
+      witnesses: optimisticOwnershipWitnesses,
+    }),
+    [optimisticOwnershipScopeKey, optimisticOwnershipWitnesses, teamProjects.projects],
+  );
+  const contentReadyProjectIdsRef = useRef(new Set<string>());
+  const pendingContentReadyProjectIdsRef = useRef(
+    new Map<string, { workspaceId: string; workspaceMemberId: string }>(),
+  );
+  const contentReadyHydrationRef = useRef(new Map<string, Promise<boolean>>());
+  const teamProjectIdsRef = useRef(new Set<string>());
+  teamProjectIdsRef.current = new Set(
+    teamProjects.projects.map((project) => project.projectId),
+  );
+  const readyWorkspaceId = workspaceContext?.workspaceId ?? null;
+  const readyWorkspaceMemberId = workspaceContext?.workspaceMemberId ?? null;
+  const readyScopeKey = workspaceContext
+    ? workspaceIdentityCacheKey(workspaceContext)
+    : null;
+  const contentReadyScopeKeyRef = useRef<string | null>(null);
+  if (contentReadyScopeKeyRef.current !== readyScopeKey) {
+    contentReadyScopeKeyRef.current = readyScopeKey;
+    contentReadyProjectIdsRef.current.clear();
+    pendingContentReadyProjectIdsRef.current.clear();
+    contentReadyHydrationRef.current.clear();
+  }
+  const acceptContentReadyProject = useCallback((
+    projectId: string,
+    eventWorkspaceId: string,
+    eventWorkspaceMemberId: string,
+  ): Promise<boolean> => {
+    const workspaceId = workspaceContext?.workspaceId;
+    const workspaceMemberId = workspaceContext?.workspaceMemberId;
+    if (
+      !workspaceId ||
+      !workspaceMemberId ||
+      workspaceContext?.workspaceType !== 'team' ||
+      workspaceId !== eventWorkspaceId ||
+      workspaceMemberId !== eventWorkspaceMemberId ||
+      !teamProjectIdsRef.current.has(projectId)
+    ) {
+      return Promise.resolve(false);
+    }
+    if (contentReadyProjectIdsRef.current.has(projectId)) {
+      return Promise.resolve(true);
+    }
+    const scopeKey = readyScopeKey;
+    if (!scopeKey) return Promise.resolve(false);
+    const key = `${scopeKey}:${projectId}`;
+    const existing = contentReadyHydrationRef.current.get(key);
+    if (existing) return existing;
+    if (!onTeamProjectContentReady) return Promise.resolve(false);
+    const hydration = Promise.resolve(
+      onTeamProjectContentReady(projectId, workspaceId, workspaceMemberId),
+    )
+      .then((hydrated) => {
+        if (
+          hydrated !== true ||
+          contentReadyScopeKeyRef.current !== scopeKey ||
+          !teamProjectIdsRef.current.has(projectId)
+        ) {
+          return false;
+        }
+        pendingContentReadyProjectIdsRef.current.delete(projectId);
+        contentReadyProjectIdsRef.current.add(projectId);
+        return true;
+      })
+      .catch(() => false)
+      .finally(() => {
+        if (contentReadyHydrationRef.current.get(key) === hydration) {
+          contentReadyHydrationRef.current.delete(key);
+        }
+      });
+    contentReadyHydrationRef.current.set(key, hydration);
+    return hydration;
+  }, [
+    onTeamProjectContentReady,
+    readyScopeKey,
+    workspaceContext?.workspaceMemberId,
+    workspaceContext?.workspaceId,
+    workspaceContext?.workspaceType,
+  ]);
+  useWorkspaceInvalidation({
+    'team-project-content-ready': ({ projectId, workspaceId }) => {
+      const currentWorkspaceId = workspaceContext?.workspaceId;
+      const currentWorkspaceMemberId = workspaceContext?.workspaceMemberId;
+      if (
+        !currentWorkspaceId ||
+        !currentWorkspaceMemberId ||
+        currentWorkspaceId !== workspaceId
+      ) {
+        return;
+      }
+      pendingContentReadyProjectIdsRef.current.set(projectId, {
+        workspaceId,
+        workspaceMemberId: currentWorkspaceMemberId,
+      });
+      void acceptContentReadyProject(
+        projectId,
+        workspaceId,
+        currentWorkspaceMemberId,
+      );
+    },
+  }, { workspaceContext });
+  useEffect(() => {
+    if (!readyScopeKey) return;
+    for (const [projectId, eventScope] of pendingContentReadyProjectIdsRef.current) {
+      if (
+        eventScope.workspaceId === readyWorkspaceId &&
+        eventScope.workspaceMemberId === readyWorkspaceMemberId
+      ) {
+        void acceptContentReadyProject(
+          projectId,
+          eventScope.workspaceId,
+          eventScope.workspaceMemberId,
+        );
+      }
+    }
+  }, [
+    acceptContentReadyProject,
+    readyScopeKey,
+    readyWorkspaceId,
+    readyWorkspaceMemberId,
+    teamProjects.projects,
+  ]);
+  // Open handler for the "全部项目" grid. A project already in the member's local
+  // list opens directly. A remote Team project first creates an authority-bound
+  // placeholder, then ProjectView opens while the daemon materializes content in
+  // the background. The placeholder stamp keeps every content writer fail-closed.
+  const [pullingProjectId, setPullingProjectId] = useState<string | null>(null);
+  // The 全部项目 page's collection tab (OPEND-3108). The legacy `all-projects`
+  // view is a deep link to the 团队项目 tab; every other entry keeps whatever
+  // tab the user last picked.
+  const [projectsCollection, setProjectsCollection] = useState<ProjectCollectionScope>('recent');
+  useEffect(() => {
+    // Enter
