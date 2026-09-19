@@ -1,0 +1,214 @@
+    >
+                        {tab.title}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              )}
+
+              <div className="inline-switcher__row">
+                <span className="inline-switcher__label">
+                  {t('inlineSwitcher.modelLabel')}
+                </span>
+                {apiModelOptions.length > 0 ? (
+                  <SearchableModelSelect
+                    className="inline-switcher__select"
+                    popoverClassName="inline-model-popover"
+                    data-testid="inline-model-switcher-api-model"
+                    searchInputTestId="inline-model-switcher-api-model-search"
+                    popoverTestId="inline-model-switcher-api-model-popover"
+                    searchPlaceholder={t('designs.searchPlaceholder')}
+                    getPopoverBoundary={getModelPopoverBoundary}
+                    aria-label={t('inlineSwitcher.modelLabel')}
+                    models={apiModelChoices}
+                    value={config.model}
+                    onChange={(nextValue) => {
+                      trackExecutionSettingsPopoverClick(analytics.track, {
+                        page_name: 'home',
+                        area: 'execution_settings_popover',
+                        element: 'model_dropdown',
+                        execution_mode: 'byok',
+                        provider_id:
+                          byokProtocolToTracking(apiProtocol) ?? undefined,
+                        model_id: modelIdForTracking(nextValue),
+                      });
+                      onApiModelChange?.(nextValue);
+                    }}
+                    additionalOptions={
+                      config.model && !apiModelIds.includes(config.model)
+                        ? [
+                            {
+                              value: config.model,
+                              label: `${config.model} ${t('inlineSwitcher.customSuffix')}`,
+                            },
+                          ]
+                        : undefined
+                    }
+                  />
+                ) : (
+                  <span className="inline-switcher__hint">
+                    {t('inlineSwitcher.openSettingsForModel')}
+                  </span>
+                )}
+              </div>
+
+              {!config.apiKey ? (
+                <div className="inline-switcher__warn" role="status">
+                  {t('inlineSwitcher.missingApiKey')}
+                </div>
+              ) : null}
+            </>
+          ) : compact ? (
+            // Compact home popover: a plain list of the CURRENT agent's model
+            // names (no header, no agent icons) — switching agents lives in
+            // the execution settings entry below.
+            <div className="inline-switcher__row">
+              {currentAgent && compactModelRows.length > 0 ? (
+                <div
+                  className="inline-switcher__agent-grid"
+                  role="radiogroup"
+                  ref={compactModelListRef}
+                >
+                  {compactModelRows.map(({ model: m, selectable }) => {
+                    const active = currentModelId === m.id;
+                    // A model above the caller's plan is shown, but honestly:
+                    // disabled with the reason the settings picker already uses,
+                    // never as a normal row whose click gets reverted.
+                    const lockedHint = selectable
+                      ? null
+                      : t('settings.amrModelUpgradeHint');
+                    return (
+                      <div key={m.id} className="inline-switcher__agent-row">
+                        <button
+                          type="button"
+                          role="radio"
+                          aria-checked={active}
+                          aria-disabled={selectable ? undefined : 'true'}
+                          title={lockedHint ?? undefined}
+                          className={
+                            'inline-switcher__agent' +
+                            (active ? ' is-active' : '') +
+                            (selectable ? '' : ' is-locked')
+                          }
+                          data-testid={`inline-model-switcher-compact-model-${m.id}`}
+                          onClick={() => {
+                            // The sink is the authority, not the row's styling:
+                            // a refused pick routes to the plans page (same as
+                            // the settings picker's lock) instead of writing a
+                            // choice the config would revert.
+                            if (!applyAgentModel(m.id)) {
+                              if (amrCanUpgrade || campaignNeedsUpgrade) {
+                                openAmrModelUpgrade();
+                              }
+                              return;
+                            }
+                            trackExecutionSettingsPopoverClick(analytics.track, {
+                              page_name: 'home',
+                              area: 'execution_settings_popover',
+                              element: 'model_dropdown',
+                              execution_mode: 'local_cli',
+                              model_id: modelIdForTracking(m.id),
+                            });
+                            setOpen(false);
+                          }}
+                        >
+                          <span
+                            className="inline-switcher__agent-logo"
+                            aria-hidden="true"
+                          >
+                            {(() => {
+                              const src = modelProviderIconSrc(m.id);
+                              return src ? (
+                                <img
+                                  src={src}
+                                  alt=""
+                                  width={16}
+                                  height={16}
+                                />
+                              ) : (
+                                <AgentIcon id={currentAgent.id} size={16} />
+                              );
+                            })()}
+                          </span>
+                          <span className="inline-switcher__agent-name">
+                            {modelVersionLabel(m.id, m.label)}
+                          </span>
+                          {lockedHint ? (
+                            <span
+                              className="inline-switcher__agent-lock"
+                              data-testid={`inline-model-switcher-compact-model-lock-${m.id}`}
+                            >
+                              <Icon name="lock" size={12} />
+                              <VisuallyHidden>{lockedHint}</VisuallyHidden>
+                            </span>
+                          ) : null}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <span className="inline-switcher__hint">
+                  {t('inlineSwitcher.openSettingsForModel')}
+                </span>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="inline-switcher__row">
+                <span className="inline-switcher__label">
+                  {t('inlineSwitcher.agentLabel')}
+                </span>
+                {installedAgents.length === 0 ? (
+                  <span className="inline-switcher__hint">
+                    {t('inlineSwitcher.noAgentsDetected')}
+                  </span>
+                ) : (
+                  <div
+                    className="inline-switcher__agent-grid"
+                    role="radiogroup"
+                  >
+                    {installedAgents
+                      .filter((a) => a.id !== 'amr')
+                      .map((a) => {
+                      const active = config.agentId === a.id;
+                      const agentName = displayAgentChipName(a);
+                      const showAgentReminder =
+                        a.id === 'amr' &&
+                        showAmrReminderInPopover &&
+                        config.agentId !== 'amr';
+                      return (
+                        <div
+                          key={a.id}
+                          className="inline-switcher__agent-row"
+                        >
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={active}
+                            aria-label={
+                              a.id === 'amr'
+                                ? `${agentName} ${amrInlineStatus}`
+                                : agentName
+                            }
+                            className={
+                              'inline-switcher__agent' +
+                              (active ? ' is-active' : '') +
+                              (showAgentReminder ? ' has-amr-reminder' : '')
+                            }
+                            data-testid={`inline-model-switcher-agent-${a.id}`}
+                            onClick={() => void handleAgentButtonClick(a.id)}
+                            title={
+                              a.id === 'amr' && amrLoginPending
+                                ? amrPendingHoverLabel
+                                : a.id !== 'amr' && a.version
+                                  ? `${agentName} · ${a.version}`
+                                  : agentName
+                            }
+                          >
+                            <AgentIcon id={a.id} size={20} />
+                            {showAgentReminder ? (
+                              <span
+                                className="inline-switcher__amr-reminder-dot inline-switcher__amr-reminder-dot--agent"
+                                data-testid="inline-model-switcher-agent-amr-remin
