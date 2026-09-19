@@ -1,0 +1,216 @@
+der"
+                                aria-hidden="true"
+                              />
+                            ) : null}
+                            <span className="inline-switcher__agent-name">
+                              {agentName}
+                            </span>
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+              {amrInstalled ? (
+                <div
+                  className={
+                    'inline-switcher__account' +
+                    (config.agentId === 'amr' ? ' is-active' : '')
+                  }
+                >
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={config.agentId === 'amr'}
+                    aria-label={`OpenDesign ${amrInlineStatus}`}
+                    className="inline-switcher__account-id inline-switcher__account-select"
+                    data-testid="inline-model-switcher-agent-amr"
+                    title={amrLoginPending ? amrPendingHoverLabel : undefined}
+                    onClick={() => void handleAgentButtonClick('amr')}
+                  >
+                    <span className="inline-switcher__account-id-icon">
+                      <AgentIcon id="amr" size={24} />
+                      {showAmrReminderInPopover && config.agentId !== 'amr' ? (
+                        <span
+                          className="inline-switcher__amr-reminder-dot inline-switcher__amr-reminder-dot--account"
+                          data-testid="inline-model-switcher-account-amr-reminder"
+                          aria-hidden="true"
+                        />
+                      ) : null}
+                    </span>
+                    <span className="inline-switcher__account-text">
+                      <span className="inline-switcher__account-name-row">
+                        <span className="inline-switcher__account-name">
+                          OpenDesign
+                        </span>
+                        {amrLoggedIn ? (
+                          <PlanBadge plan={amrPlanLabel} size="md" />
+                        ) : null}
+                      </span>
+                      {amrLoggedIn && amrBalanceDisplayLabel ? (
+                        <span className="inline-switcher__account-subtitle">
+                          <span className="inline-switcher__account-stat">
+                            <span className="inline-switcher__account-stat-label">
+                              {t('settings.amrBalance')}
+                            </span>
+                            <span className="inline-switcher__account-stat-value">
+                              {amrBalanceDisplayLabel}
+                            </span>
+                          </span>
+                        </span>
+                      ) : null}
+                    </span>
+                  </button>
+                  {amrLoginError ? (
+                    <span className="inline-switcher__account-status is-error">
+                      {amrLoginError}
+                    </span>
+                  ) : amrLoggedIn ? (
+                    amrCanUpgrade ? (
+                      <button
+                        type="button"
+                        className="inline-switcher__account-upgrade"
+                        data-testid="inline-model-switcher-account-upgrade"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const attribution = recordAmrEntry(
+                            analytics.track,
+                            'inline_amr_upgrade',
+                            new Date(),
+                            { metricsConsent: config.telemetry?.metrics === true },
+                          );
+                          const deviceId = amrHandoffDeviceId({
+                            metricsConsent: config.telemetry?.metrics === true,
+                            resolvedDeviceId: getResolvedDeviceId(),
+                            installationId: config.installationId,
+                          });
+                          window.open(
+                            attributedAmrUrl(
+                              amrPlansUrlForProfile(
+                                amrStatus?.profile ??
+                                  config.agentCliEnv?.amr?.OPEN_DESIGN_AMR_PROFILE,
+                              ),
+                              attribution,
+                              deviceId,
+                            ),
+                            '_blank',
+                            'noopener,noreferrer',
+                          );
+                        }}
+                      >
+                        {t('settings.amrUpgrade')}
+                      </button>
+                    ) : null
+                  ) : (
+                    <button
+                      type="button"
+                      className="inline-switcher__account-action"
+                      data-testid="inline-model-switcher-account-action"
+                      title={amrLoginPending ? amrPendingHoverLabel : undefined}
+                      onClick={() => {
+                        if (amrLoginPending) {
+                          void handleAmrCancelLogin();
+                          return;
+                        }
+                        const attribution = recordAmrEntry(
+                          analytics.track,
+                          'inline_model_switcher_amr_row',
+                          new Date(),
+                          { metricsConsent: config.telemetry?.metrics === true },
+                        );
+                        void handleAmrSignIn(attribution);
+                      }}
+                    >
+                      {amrStatusIconName ? (
+                        <Icon name={amrStatusIconName} size={13} />
+                      ) : null}
+                      {amrActionLabel}
+                    </button>
+                  )}
+                </div>
+              ) : null}
+              </div>
+
+              {currentAgent &&
+              currentAgent.models &&
+              currentAgent.models.length > 0 ? (
+                <div className="inline-switcher__row">
+                  <span className="inline-switcher__label">
+                    {t('inlineSwitcher.modelLabel')}
+                  </span>
+                  <SearchableModelSelect
+                    className="inline-switcher__select"
+                    popoverClassName="inline-model-popover"
+                    data-testid="inline-model-switcher-agent-model"
+                    searchInputTestId="inline-model-switcher-agent-model-search"
+                    popoverTestId="inline-model-switcher-agent-model-popover"
+                    searchPlaceholder={t('designs.searchPlaceholder')}
+                    getPopoverBoundary={getModelPopoverBoundary}
+                    aria-label={t('inlineSwitcher.modelLabel')}
+                    models={inlineAgentModelOptions}
+                    // Only AMR's catalog genuinely spans multiple model
+                    // vendors — every other agent's model list is one
+                    // provider's own ids (o1/o3/o4-mini alongside gpt-*,
+                    // for instance), which the company heuristic would
+                    // otherwise split into misleading fake "companies".
+                    groupByCompany={currentAgent?.id === 'amr'}
+                    value={currentModelId ?? ''}
+                    onChange={(nextValue) => {
+                      // Same sink as the compact list — `serviceTier: undefined`
+                      // is load-bearing here: `mergeAgentModelChoice` reads the
+                      // own property to DROP a stale tier from the previous
+                      // model, so the key must survive the hand-off.
+                      if (
+                        !applyAgentModel(nextValue, { serviceTier: undefined })
+                      ) {
+                        return;
+                      }
+                      trackExecutionSettingsPopoverClick(analytics.track, {
+                        page_name: 'home',
+                        area: 'execution_settings_popover',
+                        element: 'model_dropdown',
+                        execution_mode: 'local_cli',
+                        model_id: modelIdForTracking(nextValue),
+                      });
+                    }}
+                    additionalOptions={
+                      currentAgent.id !== 'amr' &&
+                      currentModelId &&
+                      !currentAgent.models.some((m) => m.id === currentModelId)
+                        ? [
+                            {
+                              value: currentModelId,
+                              label: `${currentModelId} ${t('inlineSwitcher.customSuffix')}`,
+                            },
+                          ]
+                        : undefined
+                    }
+                    disabledOptionHint={
+                      currentAgent?.id === 'amr'
+                        ? (option) =>
+                            option.enabled === false
+                              ? t('settings.amrModelUpgradeHint')
+                              : null
+                        : undefined
+                    }
+                    onDisabledOptionUpgrade={
+                      currentAgent?.id === 'amr'
+                        ? openAmrModelUpgrade
+                        : undefined
+                    }
+                  />
+                </div>
+              ) : null}
+            </>
+          )}
+
+          <button
+            type="button"
+            className="inline-switcher__more"
+            data-testid="inline-model-switcher-open-settings"
+            onClick={() => {
+              trackExecutionSettingsPopoverClick(analytics.track, {
+                page_name: 'home',
+                area: 'execution_settings_popover',
+                element: 'open_exec
