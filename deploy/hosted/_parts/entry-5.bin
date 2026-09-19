@@ -1,0 +1,223 @@
+ the same commit as the mount. The read is destructive, so it applies once.
+  const [homePromptHandoff, setHomePromptHandoff] = useState<HomePromptHandoff | null>(
+    () => takeHomePromptHandoff(),
+  );
+  const entryMainScrollRef = useRef<HTMLElement | null>(null);
+  // Entry views share this element, so route changes must not inherit the previous view's offset.
+  useLayoutEffect(() => {
+    const scrollContainer = entryMainScrollRef.current;
+    if (!scrollContainer) return;
+    scrollContainer.scrollTop = 0;
+  }, [view]);
+  const analytics = useAnalytics();
+  // 产品拍板 D5: the campaign modal's paid 立即使用 performs the REAL switch —
+  // daemon execution mode + Cloud agent (amr) + DeepSeek V4 Flash — through
+  // the same persistence callbacks the InlineModelSwitcher writes through.
+  // Mode must flip first: a paid user still on BYOK (`mode === 'api'`) would
+  // otherwise keep the BYOK provider even after agent/model ids change.
+  const applyDeepSeekCampaignModel = useCallback(
+    (agentId: string, modelId: string) => {
+      onModeChange('daemon');
+      onAgentChange(agentId);
+      onAgentModelChange(agentId, { model: modelId });
+    },
+    [onAgentChange, onAgentModelChange, onModeChange],
+  );
+  function changeView(next: EntryViewKind) {
+    const navElement = navElementForView(next);
+    if (navElement) {
+      trackHomeNavClick(analytics.track, {
+        page_name: 'home',
+        area: 'nav',
+        element: navElement,
+      });
+    }
+    navigate({ kind: 'home', view: next });
+  }
+
+  // Project collection surfaces have no legacy page-level tracker. Community
+  // is conditionally mounted and tracks its own visit; always-mounted library
+  // surfaces receive an explicit isActive prop below.
+  useEffect(() => {
+    if (view === 'drafts') trackPageView(analytics.track, { page_name: 'drafts' });
+    else if (view === 'all-projects') trackPageView(analytics.track, { page_name: 'all_projects' });
+  }, [analytics.track, view]);
+
+  function startPluginAuthoring(goal?: string) {
+    setHomePromptHandoff(
+      createPluginAuthoringHandoff(Date.now(), goal),
+    );
+    changeView('home');
+  }
+
+  function usePluginFromLibrary(
+    record: InstalledPluginRecord,
+    action: PluginUseAction = 'use',
+    homeType?: { chipId: string; projectKind: ProjectKind },
+  ) {
+    setHomePromptHandoff(
+      createPluginUseHandoff(Date.now(), record.id, { action, ...homeType }),
+    );
+    changeView('home');
+  }
+
+  function useSkillFromLibrary(skill: SkillSummary) {
+    setHomePromptHandoff(createSkillUseHandoff(Date.now(), skill));
+    changeView('home');
+  }
+
+  useEffect(() => {
+    if (view !== 'home' || !homePromptHandoff) return;
+    const frame = window.requestAnimationFrame(() => {
+      const scrollContainer = entryMainScrollRef.current;
+      if (!scrollContainer) return;
+      smoothScrollToTop(scrollContainer);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [homePromptHandoff?.id, view]);
+
+  // The frosted top edge exists to melt content that scrolls UP under the tab
+  // strip. At rest nothing is under it, but it blurred anyway — and because
+  // `.entry-main__inner` starts its content at 12px, every page's h2 sat inside
+  // that 32px band and read as a smudged dark block behind the title
+  // (acceptance #28). Gate the blur on actually being scrolled.
+  useEffect(() => {
+    const scrollContainer = entryMainScrollRef.current;
+    if (!scrollContainer) return;
+    const sync = () => {
+      scrollContainer.classList.toggle('is-scrolled', scrollContainer.scrollTop > 0);
+    };
+    sync();
+    scrollContainer.addEventListener('scroll', sync, { passive: true });
+    return () => scrollContainer.removeEventListener('scroll', sync);
+  }, [view]);
+
+  useEffect(() => {
+    setIntegrationTab(integrationInitialTab);
+  }, [integrationInitialTab]);
+
+  function openIntegrationTab(tab: IntegrationTab) {
+    setIntegrationTab(tab);
+    changeView('integrations');
+  }
+
+  function openNewProject(tab: CreateTab = 'prototype') {
+    setNewProjectInitialTab(tab);
+    setNewProjectOpen(true);
+  }
+
+  function startBlankProjectFromRail() {
+    void Promise.resolve(
+      onCreateProject({
+        name: t('common.untitled'),
+        skillId: null,
+        designSystemId: null,
+        // No user-typed name exists yet — mark it `generated` (the same tag
+        // `handleCreateProjectFromDesignSystem` and the New Project panel's
+        // blank/no-name path use) so `canAutoRenameProjectFromPrompt` stays
+        // eligible once the user's first in-project prompt or the agent's
+        // own generated title arrives. Without this the project is stuck at
+        // "未命名" forever: this rail (the Drafts / All-projects empty-state
+        // "创建" button) is the only reachable way to open a truly metadata-
+        // less blank project, and every other create path already tags its
+        // fallback name with a `nameSource` the rename gate recognizes.
+        metadata: { kind: 'other', nameSource: 'generated' },
+      }),
+    ).catch((err) => {
+      console.warn('Failed to create blank project from entry rail', err);
+    });
+  }
+
+  function handleCreate(input: CreateInput) {
+    // The NewProjectModal no longer asks the user to pick a plugin.
+    // Each project kind is silently bound to its default scenario
+    // pipeline at creation time so the user lands in a running flow
+    // without having to reason about pipeline internals. The mapping
+    // is intentionally explicit so future kind-specific scenarios
+    // (e.g. a deck- or image-specialized pipeline) can take over a
+    // single row without touching the form.
+    const pluginId = defaultPluginIdForMetadata(input.metadata);
+    const pluginInputs = defaultPluginInputsForCreate(input, pluginId);
+    const { skillSelectionProvenance, ...projectInput } = input;
+    const automaticStrategyRoute = skillSelectionProvenance === 'explicit-user'
+      ? null
+      : automaticStrategyTaskProfileForProjectMetadata(input.metadata);
+    return onCreateProject({
+      ...projectInput,
+      // The modal's Blank card historically persisted a hidden default Skill
+      // (for example agent-browser) even though the automatic scenario already
+      // owns the task workflow. When OD Next replaces that scenario, carrying
+      // the hidden Skill makes it look user-selected and can correctly trip
+      // the planning-only validator. Keep explicit template/Skill picks exact;
+      // omit only the UI's implicit default on the four automatic routes.
+      ...(automaticStrategyRoute && skillSelectionProvenance === 'automatic-default'
+        ? { skillId: null }
+        : {}),
+      ...(automaticStrategyRoute
+        ? { automaticStrategyTaskProfile: automaticStrategyRoute }
+        : pluginInputs
+          ? { pluginInputs }
+          : {}),
+    });
+  }
+
+  // Plan §3.F5 — the home prompt-loop submit path. The user picks a
+  // plugin (which calls /api/plugins/:id/apply and binds a snapshot),
+  // edits the rendered example query if any, then presses Enter. We
+  // derive a project name from the active plugin (or prompt head),
+  // forward the pluginId so POST /api/projects pins the snapshot to
+  // project + conversation, and request auto-send of the first
+  // message so the user lands inside a running pipeline.
+  //
+  // Stage B of plugin-driven-flow-plan: the rail can stamp a
+  // `projectKind` on the payload so the created project records the
+  // chosen surface (image / video / audio, etc.). Free-form Home
+  // submits now arrive with the hidden od-default router plugin and
+  // projectKind='other', so the agent infers the task type and asks only
+  // when the brief cannot be routed reliably.
+  async function handlePluginLoopSubmit(payload: PluginLoopSubmit) {
+    if (amrAuthRequired) {
+      navigate({ kind: 'home', view: 'onboarding' }, { replace: true });
+      return 'blocked' as const;
+    }
+    const createInput = pluginLoopCreateInput(payload);
+    const isAmrSend = config.mode === 'daemon' && config.agentId === 'amr';
+    const amrModelId = isAmrSend
+      ? effectiveAgentModelId(
+          agents.find((agent) => agent.id === 'amr'),
+          config.agentModels?.amr,
+        )
+      : undefined;
+    // OPEND-3300 / 3309: a wallet this shell already knows is empty is
+    // answered HERE, on the click tick, before the project frame opens — the
+    // dialog lands on Home, no frame, no project, no request. The reading is
+    // the one the rail's 额度 pill shows for the exact scope the send would
+    // run in. One background confirmation re-reads the wallet; only a
+    // non-blocking answer (a recharge the projection had not seen) moves the
+    // send forward, and a dismiss in the meantime wins.
+    if (isAmrSend) {
+      const memoryWorkspaceState = workspaceContextStateRef.current;
+      const memoryWorkspaceContext = memoryWorkspaceState.failure === 'unsupported'
+        ? null
+        : workspaceResourceReadContext(memoryWorkspaceState);
+      const memoryVerdict = amrBalanceGateFromMemory(
+        workspaceBillingBalanceUsd(workspaceBillingResponse, memoryWorkspaceContext),
+        { updatedAt: workspaceBillingResponse?.workspaceBalance?.updatedAt ?? null },
+      );
+      if (memoryVerdict) {
+        const memoryScope = amrBalanceGateScopeForWorkspaceContext(memoryWorkspaceContext);
+        const blockedBranch = resolveAmrBalanceBranch({
+          context: memoryWorkspaceContext,
+          billing: workspaceBilling,
+        });
+        const decision = await new Promise<'retry' | 'dismiss'>((resolve) => {
+          onAmrBalanceGateBlockChange({
+            reason: memoryVerdict.reason,
+            dialog: amrBalanceBlockedDialog(blockedBranch),
+            upgradeIntent: amrBalanceDialogUpgradeIntent(blockedBranch),
+            snapshot: memoryVerdict.snapshot,
+            resolve,
+          });
+          void checkAmrBalanceGate(memoryScope, amrModelId)
+            .then((confirmed) => {
+              // Still em
