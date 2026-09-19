@@ -1,0 +1,294 @@
+assName="onboarding-view__setup-head-actions">
+          <button
+            type="button"
+            className={`onboarding-view__mini-button${scanning ? ' is-loading' : ''}`}
+            onClick={onRefresh}
+            disabled={scanning}
+          >
+            {scanning ? t('settings.rescanRunning') : t('settings.rescan')}
+          </button>
+          <button
+            type="button"
+            className={`onboarding-view__mini-button${running ? ' is-loading' : ''}`}
+            onClick={onTest}
+            disabled={running || !canTest}
+            title={t('settings.testTitle')}
+          >
+            {running ? t('settings.testRunning') : t('settings.test')}
+          </button>
+        </div>
+      </div>
+      {scanning ? (
+        <div className="onboarding-view__scan-copy" role="status">
+          <p className="onboarding-view__scan-status">
+            <Icon name="spinner" size={13} className="icon-spin" />
+            <span>{t('settings.rescanRunning')}</span>
+          </p>
+          <p className="onboarding-view__scan-hint">
+            {t('settings.onboardingCliScanHint')}
+          </p>
+        </div>
+      ) : null}
+      {agents.length > 0 ? (
+        <div className="onboarding-view__agent-strip">
+          {agents.map((agent, index) => (
+            <button
+              key={agent.id}
+              type="button"
+              className={`onboarding-view__agent-chip${
+                selectedAgentId === agent.id ? ' is-selected' : ''
+              }`}
+              style={{ animationDelay: `${index * 45}ms` }}
+              onClick={() => onSelectAgent(agent.id)}
+              aria-pressed={selectedAgentId === agent.id}
+            >
+              <AgentIcon id={agent.id} size={22} />
+              <span>
+                <strong>{agent.name}</strong>
+                <small>
+                  {agent.available
+                    ? agent.version ?? t('common.installed')
+                    : t('settings.dshSetupRequired')}
+                </small>
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {showEmpty ? (
+        <div className="onboarding-view__empty-slice">
+          {t('settings.noAgentsDetected')}
+        </div>
+      ) : null}
+      {selectedAgent && modelOptions.length > 0 ? (
+        <OnboardingDropdown
+          label={`${t('settings.modelPicker')} · ${selectedAgent.name}`}
+          placeholder={t('settings.modelSourceFallback')}
+          value={selectedModel}
+          options={modelOptions}
+          onChange={onSelectModel}
+          searchable
+          searchPlaceholder={t('newproj.modelSearch')}
+        />
+      ) : null}
+      {testState.status === 'running' ? (
+        <p className="onboarding-view__test-status is-running" role="status">
+          {t('settings.testRunning')}
+        </p>
+      ) : testState.status === 'done' ? (
+        <p
+          className={`onboarding-view__test-status is-${onboardingTestVariant(
+            testState.result,
+          )}`}
+          role={testState.result.ok ? 'status' : 'alert'}
+        >
+          {renderOnboardingAgentTestMessage(
+            t,
+            testState.result,
+            selectedAgent?.name ?? '',
+          )}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function OnboardingByokSetupPanel({
+  apiProtocol,
+  apiKey,
+  baseUrl,
+  model,
+  selectedProvider,
+  providerOptions,
+  apiKeyVisible,
+  onToggleApiKey,
+  onProtocolChange,
+  onProviderChange,
+  onApiKeyChange,
+  onModelChange,
+  onBaseUrlChange,
+  modelOptions,
+  testState,
+  canTest,
+  onTest,
+  modelsState,
+  canFetchModels,
+  onFetchModels,
+}: {
+  apiProtocol: ApiProtocol;
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+  selectedProvider: KnownProvider | null;
+  providerOptions: Array<{ value: string; label: string }>;
+  modelOptions: Array<{ value: string; label: string }>;
+  apiKeyVisible: boolean;
+  onToggleApiKey: () => void;
+  onProtocolChange: (protocol: ApiProtocol) => void;
+  onProviderChange: (baseUrl: string) => void;
+  onApiKeyChange: (apiKey: string) => void;
+  onModelChange: (model: string) => void;
+  onBaseUrlChange: (baseUrl: string) => void;
+  testState:
+    | { status: 'idle' }
+    | { status: 'running'; inputKey: string }
+    | { status: 'done'; inputKey: string; result: ConnectionTestResponse };
+  canTest: boolean;
+  onTest: () => void;
+  modelsState:
+    | { status: 'idle' }
+    | { status: 'running'; inputKey: string }
+    | { status: 'done'; inputKey: string; result: ProviderModelsResponse };
+  canFetchModels: boolean;
+  onFetchModels: () => void;
+}) {
+  const t = useT();
+  const running = testState.status === 'running';
+  const fetchingModels = modelsState.status === 'running';
+  const useDeploymentInput = apiProtocol === 'azure';
+  return (
+    <div className="onboarding-view__setup-panel">
+      <div className="onboarding-view__setup-head">
+        <div>
+          <strong>{t('settings.modeApiMeta')}</strong>
+          <p>{t('settings.modeApi')}</p>
+        </div>
+        <div className="onboarding-view__setup-head-actions">
+          <button
+            type="button"
+            className={`onboarding-view__mini-button${fetchingModels ? ' is-loading' : ''}`}
+            onClick={onFetchModels}
+            disabled={fetchingModels || !canFetchModels}
+            title={t('settings.fetchModelsTitle')}
+          >
+            {fetchingModels ? t('settings.fetchModelsRunning') : t('settings.fetchModels')}
+          </button>
+          <button
+            type="button"
+            className={`onboarding-view__mini-button${running ? ' is-loading' : ''}`}
+            onClick={onTest}
+            disabled={running || !canTest}
+            title={t('settings.testTitle')}
+          >
+            {running ? t('settings.testRunning') : t('settings.test')}
+          </button>
+        </div>
+      </div>
+      <div
+        className="onboarding-view__protocol-strip"
+        role="tablist"
+        aria-label={t('settings.protocolAria')}
+      >
+        {API_PROTOCOL_TABS.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={apiProtocol === tab.id}
+            className={apiProtocol === tab.id ? 'is-selected' : ''}
+            onClick={() => onProtocolChange(tab.id)}
+          >
+            {tab.title}
+          </button>
+        ))}
+      </div>
+      <OnboardingDropdown
+        label={t('settings.quickFillProvider')}
+        placeholder={t('settings.customProvider')}
+        value={selectedProvider?.baseUrl ?? ''}
+        options={providerOptions}
+        onChange={onProviderChange}
+        allowEmptyValue={apiProtocol === 'azure'}
+        searchable
+        searchPlaceholder={t('settings.quickFillProvider')}
+      />
+      <label className="onboarding-view__inline-field">
+        <span>{t('settings.apiKey')}</span>
+        <span className="onboarding-view__field-row">
+          <input
+            type={apiKeyVisible ? 'text' : 'password'}
+            placeholder={API_KEY_PLACEHOLDERS[apiProtocol]}
+            value={apiKey}
+            onChange={(event) => onApiKeyChange(event.target.value)}
+          />
+          <button type="button" onClick={onToggleApiKey}>
+            {apiKeyVisible ? t('settings.hide') : t('settings.show')}
+          </button>
+        </span>
+      </label>
+      <div className="onboarding-view__compact-fields">
+        <label className="onboarding-view__inline-field">
+          <span>{t('settings.baseUrl')}</span>
+          <input
+            type="url"
+            inputMode="url"
+            value={baseUrl}
+            placeholder={selectedProvider?.baseUrl ?? 'https://api.anthropic.com'}
+            onChange={(event) => onBaseUrlChange(event.target.value)}
+          />
+        </label>
+        {modelOptions.length > 0 && !useDeploymentInput ? (
+          <OnboardingDropdown
+            label={t('settings.model')}
+            placeholder={defaultKnownProviderModel(selectedProvider) || 'claude-sonnet-4-5'}
+            value={model}
+            options={modelOptions}
+            onChange={onModelChange}
+            placement="top"
+            searchable
+            searchPlaceholder={t('newproj.modelSearch')}
+          />
+        ) : (
+          <label className="onboarding-view__inline-field">
+            <span>
+              {useDeploymentInput
+                ? t('settings.azureDeploymentModel')
+                : t('settings.model')}
+            </span>
+            <input
+              type="text"
+              value={model}
+              placeholder={
+                useDeploymentInput
+                  ? t('settings.azureDeploymentModel')
+                  : defaultKnownProviderModel(selectedProvider) || 'claude-sonnet-4-5'
+              }
+              onChange={(event) => onModelChange(event.target.value.trim())}
+            />
+          </label>
+        )}
+      </div>
+      {modelsState.status === 'running' ? (
+        <p className="onboarding-view__test-status is-running" role="status">
+          {t('settings.fetchModelsRunning')}
+        </p>
+      ) : modelsState.status === 'done' ? (
+        <p
+          className={`onboarding-view__test-status is-${onboardingProviderModelsVariant(
+            modelsState.result,
+          )}`}
+          role={modelsState.result.ok ? 'status' : 'alert'}
+        >
+          {renderOnboardingProviderModelsMessage(t, modelsState.result)}
+        </p>
+      ) : null}
+      {testState.status === 'running' ? (
+        <p className="onboarding-view__test-status is-running" role="status">
+          {t('settings.testRunning')}
+        </p>
+      ) : testState.status === 'done' ? (
+        <p
+          className={`onboarding-view__test-status is-${onboardingTestVariant(
+            testState.result,
+          )}`}
+          role={testState.result.ok ? 'status' : 'alert'}
+        >
+          {renderOnboardingProviderTestMessage(t, testState.result, model)}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function onboardingTestVariant(
+  result: Con
