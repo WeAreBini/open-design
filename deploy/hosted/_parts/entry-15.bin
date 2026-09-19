@@ -1,0 +1,232 @@
+lidationWorthStarting, runtime, step]);
+
+  // A validation only has a consumer while the setup step can still act on its
+  // verdict. Leaving the step (Back, a runtime switch, closing onboarding) ends
+  // that, and so does staying put while the inputs stop being testable at all —
+  // a cleared BYOK key or a daemon that went away leaves a request nothing can
+  // consume, exactly like walking out. Both release the runtime through the
+  // same cleanup, and React runs it on unmount too.
+  // Deliberately the wider `canTestAgent` rather than the narrower condition
+  // that governs starting: a run the user began by hand on a setup-required
+  // entry still has to be released when they leave. What may start on its own
+  // is a stricter question than what must be cleaned up.
+  const runtimeValidationConsumable =
+    runtimeSetupStep
+    && ((runtime === 'local' && canTestAgent) || (runtime === 'byok' && canTestProvider));
+
+  useEffect(() => {
+    if (!runtimeValidationConsumable) return;
+    return () => {
+      abortRuntimeValidations();
+    };
+  }, [runtime, runtimeValidationConsumable]);
+
+  const primaryActionLabel = t('settings.onboardingContinue');
+
+  // Cloud remains the primary identity path. Local CLI and BYOK are independent
+  // direct setup paths; authenticated users keep the full source chooser.
+  if (step === 0) {
+    const cloudBusy = amrLoginBusy;
+    const amrStatusResolving = !amrStatusResolved;
+    return (
+      <section
+        className="onboarding-view onboarding-view--cloud"
+        aria-label={t('settings.welcomeTitle')}
+      >
+        <div className="onboarding-cloud__pane">
+          <div className="onboarding-cloud__center">
+            <h1 className="onboarding-cloud__title">{t('settings.onboardingCloudTitle')}</h1>
+            <p className="onboarding-cloud__body">{t('settings.onboardingCloudBody')}</p>
+            <button
+              type="button"
+              className="onboarding-cloud__primary"
+              onClick={() => {
+                if (amrStatusResolving) return;
+                if (amrSignedIn) {
+                  recordAmrEntry(analytics.track, 'onboarding_amr_card', new Date(), {
+                    metricsConsent: config.telemetry?.metrics === true,
+                  });
+                  recordAmrEntry(
+                    analytics.track,
+                    'onboarding_amr_sign_in_continue',
+                    new Date(),
+                    {
+                      metricsConsent: config.telemetry?.metrics === true,
+                      reuseExistingFrom: ['onboarding_amr_card'],
+                    },
+                  );
+                  continueAfterCloudSignIn();
+                  return;
+                }
+                void handleCloudSignIn();
+              }}
+              disabled={cloudBusy || amrLoginCancelPending || amrStatusResolving}
+              aria-busy={cloudBusy || amrStatusResolving ? true : undefined}
+            >
+              <Icon name="log-in" size={17} />
+              <span>
+                {cloudBusy
+                  ? t('settings.amrSigningIn')
+                  : amrStatusResolving
+                    ? t('common.loading')
+                    : amrSignedIn
+                      ? t('settings.onboardingCloudContinue')
+                      : t('settings.onboardingCloudSignIn')}
+              </span>
+            </button>
+            {amrLoginError ? (
+              <span className="onboarding-cloud__error" role="alert">
+                {amrLoginError}
+              </span>
+            ) : null}
+            {/* Manual device-auth fallback, mirroring Settings' AmrLoginPill:
+                vela auto-opens the browser, but when that fails silently (e.g.
+                corp-managed hosts) the pending login otherwise looks like a
+                dead button — surface the activation link the status poll
+                already carries. */}
+            {cloudBusy && amrStatus?.activationUrl && !activationHintClosed ? (
+              <div className="amr-login-activation onboarding-cloud__activation" role="group">
+                <span className="amr-login-activation__hint">
+                  {amrStatus.browserOpenFailed
+                    ? t('settings.amrActivationBrowserFailed')
+                    : t('settings.amrActivationHint')}
+                </span>
+                <div className="amr-login-activation__actions">
+                  <a
+                    className="amr-login-activation__open"
+                    href={amrStatus.activationUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {t('settings.amrActivationOpen')}
+                  </a>
+                  <button
+                    type="button"
+                    className="onboarding-cloud__activation-dismiss"
+                    onClick={() => setActivationHintClosed(true)}
+                  >
+                    {t('common.cancel')}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+            {cloudBusy ? (
+              <button
+                type="button"
+                className="onboarding-cloud__cancel"
+                onClick={handleCancelAmrLogin}
+                disabled={amrLoginCancelPending}
+              >
+                {t('settings.amrCancelSignIn')}
+              </button>
+            ) : (
+              <div className="onboarding-cloud__alts">
+                <Button
+                  variant="subtle"
+                  className="onboarding-cloud__alt-btn"
+                  onClick={() => {
+                    emitOnboardingClick('local_coding_agent', 'select_runtime', {
+                      runtime_type: 'local_cli',
+                    });
+                    setRuntime('local');
+                    setRuntimeSetupEntry('cloud');
+                    void scanCliAgents({ preferExisting: true });
+                    setStep(2);
+                  }}
+                >
+                  <Icon name="robot" size={16} />
+                  {t('settings.onboardingLocalTitle')}
+                </Button>
+                <span className="onboarding-cloud__alts-or">
+                  {t('settings.onboardingCloudOr')}
+                </span>
+                <Button
+                  variant="subtle"
+                  className="onboarding-cloud__alt-btn"
+                  onClick={() => {
+                    emitOnboardingClick('byok', 'select_runtime', { runtime_type: 'byok' });
+                    setRuntime('byok');
+                    setRuntimeSetupEntry('cloud');
+                    setStep(2);
+                  }}
+                >
+                  <Icon name="key" size={16} />
+                  {t('settings.onboardingByokTitle')}
+                </Button>
+              </div>
+            )}
+          </div>
+          <footer className="onboarding-cloud__footer">
+            <LanguageMenu placement="up" align="start" />
+            <span>
+              © {new Date().getFullYear()} OpenDesign · {t('settings.onboardingCloudRights')}
+            </span>
+          </footer>
+        </div>
+        <div className="onboarding-cloud__art" aria-hidden="true">
+          <img src="/onboarding/onboarding-cloud-art.webp" alt="" />
+        </div>
+      </section>
+    );
+  }
+
+  if (step === 1) {
+    return (
+      <section
+        className="onboarding-view onboarding-view--cloud"
+        aria-label={t('settings.onboardingExecutionTitle')}
+      >
+        <div className={`onboarding-cloud__pane ${onboardingSourceStyles.pane}`}>
+          <div className={`onboarding-cloud__center ${onboardingSourceStyles.center}`}>
+            <h1 className="onboarding-cloud__title">
+              {t('settings.onboardingExecutionTitle')}
+            </h1>
+            <p className="onboarding-cloud__body">
+              {t('settings.onboardingExecutionBody')}
+            </p>
+            <div
+              className={onboardingSourceStyles.options}
+              role="radiogroup"
+              aria-label={t('settings.onboardingExecutionTitle')}
+            >
+              <Button
+                ref={(node) => {
+                  modelSourceOptionRefs.current.amr = node;
+                }}
+                variant="subtle"
+                role="radio"
+                aria-checked={modelSource === 'amr'}
+                tabIndex={modelSource === 'amr' ? 0 : -1}
+                className={`${onboardingSourceStyles.option} ${
+                  onboardingSourceStyles.hostedOption
+                } ${modelSource === 'amr' ? onboardingSourceStyles.optionActive : ''}`}
+                onClick={() => setModelSource('amr')}
+                onKeyDown={(event) => handleModelSourceKeyDown(event, 'amr')}
+              >
+                <span className={onboardingSourceStyles.optionIcon}>
+                  <Icon name="sparkles" size={17} />
+                </span>
+                <span className={onboardingSourceStyles.optionCopy}>
+                  <span className={onboardingSourceStyles.optionHeading}>
+                    <strong className={onboardingSourceStyles.optionTitle}>
+                      {t('settings.onboardingAmrModelSourceLabel')}
+                    </strong>
+                    <span className={onboardingSourceStyles.recommendedBadge}>
+                      {t('settings.onboardingRecommended')}
+                    </span>
+                  </span>
+                  <span className={onboardingSourceStyles.optionBody}>
+                    {t('settings.onboardingAmrCloudBenefitModels')}
+                  </span>
+                </span>
+                <span className={onboardingSourceStyles.radio} aria-hidden="true" />
+              </Button>
+              <Button
+                ref={(node) => {
+                  modelSourceOptionRefs.current.local = node;
+                }}
+                variant="subtle"
+                role="radio"
+                aria-checked={modelSource === 'local'}
+                tabIndex={modelSource === 'local' ? 0 : -1}
+     
