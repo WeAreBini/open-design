@@ -1,0 +1,213 @@
+ + binding pair the
+                  // standalone /community route in App.tsx uses, so Use
+                  // lands the prompt AND the plugin driver in Home's composer.
+                  seedHomeComposerPrompt(target.prompt);
+                  setHomePromptHandoff(createPluginUseHandoff(Date.now(), target.templateId, {
+                    action: 'use',
+                    chipId: target.chipId,
+                    projectKind: target.projectKind,
+                  }));
+                  changeView('home');
+                }}
+                // The gallery card's full details modal routes Use through the
+                // same Home hand-off the plugin library uses, so the plugin
+                // becomes the composer's active driver instead of only seeding
+                // prompt text.
+                onUsePlugin={(record, action, target) => {
+                  usePluginFromLibrary(record, action, {
+                    chipId: target.chipId,
+                    projectKind: target.projectKind,
+                  });
+                }}
+              />
+            ) : null}
+            {/* Team destinations — the entry shell owns the nav frame only; each
+                view is provided by another lane (B = members/board, D = team
+                project spaces / workspace settings), rendered as a placeholder
+                until those land. */}
+            {view === 'drafts' || view === 'all-projects' ? (
+              // 全部项目 (OPEND-3108): ONE catalog — the same list the rail's
+              // 最近浏览过 shows — split by the strip's 最近浏览过 / 个人项目 /
+              // 团队项目 tabs. The legacy `all-projects` view (the
+              // `/all-projects` deep link) is this page opened on its 团队项目
+              // tab. The team half of the catalog comes from `teamProjects`,
+              // which has its own loading state and restarts from empty
+              // whenever the entry shell remounts (e.g. returning from a
+              // project); wait for BOTH reads before calling the page empty.
+              projectsLoading || (projectSearchProjects.length === 0 && teamProjects.loading) ? (
+                <div className="entry-section">
+                  <CenteredLoader label={t('common.loading')} />
+                </div>
+              ) : projectSearchProjects.length === 0 ? (
+                <EntryBlankState
+                  heading={t('entry.navDrafts')}
+                  description={t('entry.blankDraftsDescription')}
+                  actionLabel={t('entry.blankCreate')}
+                  onCreate={() => startBlankProjectFromRail()}
+                />
+              ) : (
+                <div className="entry-section">
+                  <RecentProjectsStrip
+                    projects={projectSearchProjects}
+                    designSystems={designSystems}
+                    limit={1000}
+                    heading={t('entry.navDrafts')}
+                    space="drafts"
+                    collection={projectsCollection}
+                    onCollectionChange={setProjectsCollection}
+                    isSharedProject={isSharedProject}
+                    onProjectShared={markProjectShared}
+                    onProjectShareFailed={markProjectShareFailed}
+                    onProjectUnshared={markProjectUnshared}
+                    projectOwnerMemberIds={teamProjectOwnerMemberIds}
+                    openingProjectId={pullingProjectId}
+                    // Pull-first opener: a 团队项目 row that is not local yet
+                    // materializes before it opens, like the old team grid.
+                    onOpen={handleOpenAllProjects}
+                    onViewAll={() => {}}
+                    onDelete={onDeleteProject}
+                    onDuplicate={onDuplicateProject}
+                    onRename={onRenameProject}
+                    canAssignInviteRoles={workspaceContext?.permissions.canInviteMembers === true}
+                    canManageProjectCollection={workspaceContext?.permissions.canShareProjects === true}
+                  />
+                </div>
+              )
+            ) : null}
+            {view === 'members' ? (
+              <TeamSlotPlaceholder icon="users" title={t('entry.navMembers')} />
+            ) : null}
+            {view === 'board' ? (
+              <TeamSlotPlaceholder icon="kanban" title={t('entry.navBoard')} />
+            ) : null}
+            {view === 'workspace-settings' ? (
+              <TeamSlotPlaceholder icon="settings" title={t('entry.navWorkspaceSettings')} />
+            ) : null}
+          </div>
+        </main>
+      </div>
+      <NewProjectModal
+        open={newProjectOpen}
+        initialTab={newProjectInitialTab}
+        skills={skills}
+        designTemplates={designTemplates}
+        designSystems={designSystems}
+        defaultDesignSystemId={defaultDesignSystemId}
+        templates={templates}
+        {...(onDeleteTemplate ? { onDeleteTemplate } : {})}
+        promptTemplates={promptTemplates}
+        mediaProviders={config.mediaProviders}
+        connectors={connectors}
+        connectorsLoading={connectorsLoading}
+        loading={skillsLoading}
+        onCreate={handleCreate}
+        onImportClaudeDesign={onImportClaudeDesign}
+        {...(onImportFolder ? { onImportFolder } : {})}
+        {...(onImportFolderResponse ? { onImportFolderResponse } : {})}
+        onOpenConnectorsTab={() => {
+          setNewProjectOpen(false);
+          openIntegrationTab('connectors');
+        }}
+        onClose={() => setNewProjectOpen(false)}
+      />
+    </div>
+  );
+}
+
+function OnboardingView({
+  config,
+  providerModelsCache: sharedProviderModelsCache,
+  onProviderModelsCacheChange,
+  agents,
+  agentsLoading = false,
+  daemonLive,
+  onModeChange,
+  onAgentChange,
+  onAgentModelChange,
+  onApiProtocolChange,
+  onApiModelChange,
+  onConfigPersist,
+  onRefreshAgents,
+  onAmrLoginStatusChange,
+  onFinish,
+}: {
+  config: AppConfig;
+  providerModelsCache?: ProviderModelsCache;
+  onProviderModelsCacheChange?: Dispatch<SetStateAction<ProviderModelsCache>>;
+  agents: AgentInfo[];
+  agentsLoading?: boolean;
+  daemonLive: boolean;
+  onModeChange: (mode: ExecMode) => void;
+  onAgentChange: (id: string) => void;
+  onAgentModelChange: (
+    id: string,
+    choice: { model?: string; reasoning?: string; serviceTier?: string },
+  ) => void;
+  onApiProtocolChange: (protocol: ApiProtocol) => void;
+  onApiModelChange: (model: string) => void;
+  onConfigPersist: (cfg: AppConfig) => Promise<void> | void;
+  onRefreshAgents: () => Promise<AgentInfo[]> | AgentInfo[];
+  onAmrLoginStatusChange?: (status: VelaLoginStatus | null) => void;
+  onFinish: () => void;
+}) {
+  const t = useT();
+  const analytics = useAnalytics();
+  const [step, setStep] = useState(0);
+  const [runtime, setRuntime] = useState<'amr' | 'local' | 'byok' | null>(null);
+  const [runtimeSetupEntry, setRuntimeSetupEntry] = useState<'cloud' | 'chooser'>('chooser');
+  const [modelSource, setModelSource] = useState<'amr' | 'local' | 'byok'>('amr');
+  const modelSourceOptionRefs = useRef<
+    Record<'amr' | 'local' | 'byok', HTMLButtonElement | null>
+  >({ amr: null, local: null, byok: null });
+  const [apiKeyVisible, setApiKeyVisible] = useState(false);
+  const [cliScanStatus, setCliScanStatus] = useState<'idle' | 'scanning' | 'done'>('idle');
+  const [amrStatus, setAmrStatus] = useState<VelaLoginStatus | null>(null);
+  // Initial login status fetch has settled, whether signed in or not. The
+  // cloud landing uses this to avoid flashing "Sign in" before flipping to
+  // "Continue" for already-authenticated users.
+  const [amrStatusResolved, setAmrStatusResolved] = useState(false);
+  const [amrLoginPending, setAmrLoginPending] = useState(false);
+  const [amrLoginCancelPending, setAmrLoginCancelPending] = useState(false);
+  const passiveReauthCompletedRef = useRef(false);
+  const [amrLoginError, setAmrLoginError] = useState<string | null>(null);
+  // Local dismissal for the cloud landing's activation-retry card only (its
+  // own × close, distinct from "取消登录" which cancels the whole vela login).
+  // Reset whenever a login attempt isn't in flight, so a canceled-then-retried
+  // attempt shows the hint again instead of staying hidden from a prior dismiss.
+  const [activationHintClosed, setActivationHintClosed] = useState(false);
+  useEffect(() => {
+    if (!amrLoginPending) setActivationHintClosed(false);
+  }, [amrLoginPending]);
+  const [visibleAgentIds, setVisibleAgentIds] = useState<string[]>([]);
+  const [dshSetup, setDshSetup] = useState<{ busy: boolean; error: string | null } | null>(null);
+  const [providerTestState, setProviderTestState] =
+    useState<OnboardingRuntimeTestState>({ status: 'idle' });
+  const [agentTestState, setAgentTestState] = useState<OnboardingRuntimeTestState>({
+    status: 'idle',
+  });
+  // True only while a Continue click is itself waiting on validation, never for
+  // the background pass — see `awaitRuntimeValidation`.
+  const [continuePending, setContinuePending] = useState(false);
+  const [providerModelsState, setProviderModelsState] = useState<
+    | { status: 'idle' }
+    | { status: 'running'; inputKey: string }
+    | { status: 'done'; inputKey: string; result: ProviderModelsResponse }
+  >({ status: 'idle' });
+  const [localProviderModelsCache, setLocalProviderModelsCache] =
+    useState<ProviderModelsCache>({});
+  const hasSharedProviderModelsCache =
+    Boolean(sharedProviderModelsCache) && Boolean(onProviderModelsCacheChange);
+  const activeProviderModelsCache =
+    hasSharedProviderModelsCache
+      ? sharedProviderModelsCache!
+      : localProviderModelsCache;
+  const activeSetProviderModelsCache =
+    hasSharedProviderModelsCache
+      ? onProviderModelsCacheChange!
+      : setLocalProviderModelsCache;
+  const agentRevealTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+  const cliScanTokenRef = useRef(0);
+  const cliScanTelemetryRef = useRef<{
+    token: number;
+    startedAt: number;
+    o
