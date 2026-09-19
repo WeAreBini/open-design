@@ -1,0 +1,72 @@
+  });
+        }
+      }
+      // Tool loop exhausted — the model still wants to call tools but we
+      // refuse a 4th round. Close the stream gracefully; the last text
+      // delta the model emitted (if any) is already on the wire.
+      console.warn(
+        `[${opts.logTag}] tool loop bounded at MAX_BYOK_TOOL_LOOPS=${MAX_BYOK_TOOL_LOOPS}`,
+      );
+      sse.send('end', {});
+      return sse.end();
+    } catch (err: any) {
+      console.error(`[${opts.logTag}] internal error: ${err.message}`);
+      sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
+      sse.end();
+    } finally {
+      await proxyDispatcher?.close();
+    }
+   });
+  };
+
+  // SenseAudio: proprietary image (/v1/image/sync) + TTS (/v1/t2a_v2) + video
+  // (/v1/video/create) executors, Bearer auth.
+  registerByokToolChatProxy('/api/proxy/senseaudio/stream', {
+    providerId: 'senseaudio',
+    logTag: 'proxy:senseaudio',
+    defaultBaseUrl: 'https://api.senseaudio.cn',
+    tools: BYOK_SENSEAUDIO_TOOLS,
+    buildHeaders: (apiKey) => ({ Authorization: `Bearer ${apiKey}` }),
+    isImageModel: isSenseAudioImageModel,
+    runImage: executeGenerateImage,
+    runSpeech: executeGenerateSpeech,
+    runVideo: executeGenerateVideo,
+  });
+
+  // AIHubMix: routes by model name to the native protocol wire —
+  //   claude*        → Anthropic /v1/messages (base chat, no tools yet)
+  //   gemini*/imagen*→ Gemini :streamGenerateContent (base chat, no tools yet)
+  //   everything else→ OpenAI /v1/chat/completions WITH the tool loop below
+  // All on the AIHubMix origin + APP-Code. The OpenAI family keeps in-chat
+  // generate_image (/v1/images/generations) + TTS (/v1/audio/speech) + video
+  // (async /v1/videos submit→poll→download).
+  registerByokToolChatProxy('/api/proxy/aihubmix/stream', {
+    providerId: 'aihubmix',
+    logTag: 'proxy:aihubmix',
+    defaultBaseUrl: AIHUBMIX_DEFAULT_BASE_URL,
+    tools: BYOK_AIHUBMIX_TOOLS,
+    buildHeaders: (apiKey) => aihubmixHeaders(apiKey),
+    isImageModel: isAIHubMixImageModel,
+    isVideoModel: isAIHubMixVideoModel,
+    isSpeechModel: isAIHubMixSpeechModel,
+    runImage: executeAIHubMixGenerateImage,
+    runSpeech: executeAIHubMixGenerateSpeech,
+    runVideo: executeAIHubMixGenerateVideo,
+    routeByModel: true,
+  });
+
+  app.post('/api/proxy/:provider/stream', (req, res) => {
+    const proxyBody = req.body || {};
+    const provider = typeof req.params.provider === 'string' ? req.params.provider : 'unknown';
+    const reasoningDenial = authorizeReasoningEgress({
+      policy: proxyBody.reasoningExecution,
+      routeKind: 'proxy',
+      provider,
+      resolvedBaseUrl: typeof proxyBody.baseUrl === 'string' ? proxyBody.baseUrl : undefined,
+      model: typeof proxyBody.model === 'string' ? proxyBody.model : undefined,
+    });
+    if (reasoningDenial) return sendReasoningEgressDenial(res, reasoningDenial);
+    return sendApiError(res, 404, 'NOT_FOUND', 'unknown proxy provider');
+  });
+
+}
