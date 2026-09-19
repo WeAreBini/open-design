@@ -1,0 +1,254 @@
+Existing: loginResult.alreadyRunning === true },
+      );
+      amrAuthAttemptIdRef.current = authAttemptId;
+      if (loginResult.ok || loginResult.alreadyRunning) {
+        confirmAmrAuthTracking(analytics.track, authAttemptId, {
+          joinedExisting: loginResult.alreadyRunning === true,
+        });
+      }
+      observeAmrAuthTracking(analytics.track, loginResult, authAttemptId);
+      if (
+        amrLoginPollCancelledRef.current
+        || amrLoginCancelRequestedRef.current
+      ) {
+        if (loginResult.ok || loginResult.alreadyRunning) {
+          const cancelResult = await cancelVelaLogin(authAttemptId);
+          if (!cancelResult.ok) {
+            console.error('[amr-login] cancelVelaLogin failed', cancelResult);
+            amrLoginCancelRequestedRef.current = false;
+            setAmrLoginCancelPending(false);
+            setAmrLoginError(t('settings.amrLoginErrorCompact'));
+            return;
+          }
+          if (cancelResult.canceled !== true) {
+            const nextStatus = await fetchVelaLoginStatus();
+            if (nextStatus) {
+              setAmrStatus(nextStatus);
+              if (nextStatus.authAttemptId) {
+                amrAuthAttemptIdRef.current = nextStatus.authAttemptId;
+              }
+            }
+            amrLoginCancelRequestedRef.current = false;
+            amrLoginPollCancelledRef.current = false;
+            setAmrLoginCancelPending(false);
+            if (!nextStatus?.loginInFlight) return;
+          } else {
+            resolveAmrAuthTracking(analytics.track, 'cancelled', undefined, {
+              authAttemptId,
+            });
+            closeAmrActivationWindowBestEffort();
+            notifyAmrLoginStatusChanged('login-canceled');
+            amrLoginCancelRequestedRef.current = false;
+            amrLoginPollCancelledRef.current = true;
+            setAmrLoginCancelPending(false);
+            setAmrStatus((current) => (
+              current
+                ? { ...current, loggedIn: false, loginInFlight: false, user: null }
+                : current
+            ));
+            return;
+          }
+        } else {
+          resolveAmrAuthTracking(analytics.track, 'cancelled', undefined, {
+            authAttemptId,
+          });
+          if (amrLoginCancelRequestedRef.current) {
+            amrLoginCancelRequestedRef.current = false;
+            amrLoginPollCancelledRef.current = true;
+            setAmrLoginCancelPending(false);
+            setAmrStatus((current) => (
+              current
+                ? { ...current, loggedIn: false, loginInFlight: false, user: null }
+                : current
+            ));
+          }
+          return;
+        }
+      }
+      if (!loginResult.ok && !loginResult.alreadyRunning) {
+        resolveAmrAuthTracking(analytics.track, 'failed', 'spawn_failed', {
+          authAttemptId,
+        });
+        console.error('[amr-login] startVelaLogin failed', loginResult);
+        setAmrLoginError(loginResult.error || t('settings.amrLoginErrorCompact'));
+        return;
+      }
+      if (await pollAmrLoginCompletion()) {
+        continueAfterCloudSignIn();
+      }
+    } finally {
+      setAmrLoginPending(false);
+    }
+  }
+
+  async function handleCancelAmrLogin() {
+    if (!amrLoginBusy || amrLoginCancelPending) return;
+    const loginStartPending = amrLoginStartPendingRef.current;
+    const authAttemptId = amrAuthAttemptIdRef.current;
+    setAmrLoginError(null);
+    setAmrLoginCancelPending(true);
+    if (!authAttemptId) {
+      amrLoginPollCancelledRef.current = true;
+      amrLoginCancelRequestedRef.current = false;
+      setAmrLoginCancelPending(false);
+      setAmrLoginPending(false);
+      return;
+    }
+    const result = await cancelVelaLogin(authAttemptId);
+    if (!result.ok) {
+      setAmrLoginCancelPending(false);
+      setAmrLoginPending(false);
+      setAmrLoginError(t('settings.amrLoginErrorCompact'));
+      return;
+    }
+    if (result.canceled !== true) {
+      const nextStatus = await fetchVelaLoginStatus();
+      if (nextStatus) {
+        setAmrStatus(nextStatus);
+        if (nextStatus.authAttemptId) {
+          amrAuthAttemptIdRef.current = nextStatus.authAttemptId;
+        }
+      }
+      if (loginStartPending && nextStatus?.loginInFlight !== true) {
+        amrLoginCancelRequestedRef.current = true;
+        return;
+      }
+      setAmrLoginCancelPending(false);
+      if (!nextStatus?.loginInFlight) {
+        setAmrLoginPending(false);
+      }
+      return;
+    }
+    setAmrLoginCancelPending(false);
+    amrLoginPollCancelledRef.current = true;
+    if (authAttemptId) {
+      resolveAmrAuthTracking(analytics.track, 'cancelled', undefined, {
+        authAttemptId,
+      });
+    }
+    closeAmrActivationWindowBestEffort();
+    setAmrStatus((current) => (
+      current
+        ? { ...current, loggedIn: false, loginInFlight: false, user: null }
+        : current
+    ));
+    setAmrLoginPending(false);
+    notifyAmrLoginStatusChanged('login-canceled');
+  }
+
+  async function pollAmrLoginCompletion(): Promise<boolean> {
+    const startedAt = Date.now();
+    while (!amrLoginPollCancelledRef.current) {
+      await new Promise((resolve) =>
+        window.setTimeout(resolve, AMR_LOGIN_POLL_INTERVAL_MS),
+      );
+      if (amrLoginPollCancelledRef.current) return false;
+      const nextStatus = await fetchVelaLoginStatus();
+      if (nextStatus) {
+        setAmrStatus(nextStatus);
+        onAmrLoginStatusChange?.(nextStatus);
+      }
+      const authAttemptId = amrAuthAttemptIdRef.current;
+      if (nextStatus && authAttemptId) {
+        observeAmrAuthTracking(analytics.track, nextStatus, authAttemptId);
+      }
+      const outcome = amrLoginPollOutcome(nextStatus, startedAt);
+      if (outcome === 'signed-in') {
+        if (authAttemptId) {
+          resolveAmrAuthTracking(analytics.track, 'success', undefined, {
+            authAttemptId,
+            signedInUserId: nextStatus?.user?.id ?? null,
+          });
+        }
+        notifyAmrLoginStatusChanged();
+        // Onboarding may sit on this step for a while before finishOnboarding
+        // fires refreshWorkspaceSurfacesAfterOnboarding() — without firing
+        // these here too, Home's rail can render in its stale signed-out
+        // shape (still showing the "sign in to OpenDesign Cloud" callout)
+        // for however long that gap lasts. Mirrors CloudSignInTip's own
+        // finishSignedIn().
+        notifyWorkspaceContextRefresh();
+        notifyWorkspaceBillingRefresh();
+        notifyTeamProjectsChanged();
+        return true;
+      }
+      if (outcome === 'stopped' || outcome === 'timed-out') {
+        if (outcome === 'timed-out') {
+          if (authAttemptId) {
+            resolveAmrAuthTracking(analytics.track, 'timeout', 'login_timeout', {
+              authAttemptId,
+            });
+            const cancelResult = await cancelVelaLogin(authAttemptId);
+            if (cancelResult.canceled === true) {
+              setAmrStatus((current) => (
+                current
+                  ? { ...current, loggedIn: false, loginInFlight: false, user: null }
+                  : current
+              ));
+            }
+          }
+          console.error('[amr-login] poll timed out waiting for a signed-in status', { nextStatus });
+        } else {
+          if (authAttemptId) {
+            resolveAmrAuthTracking(analytics.track, 'failed', 'login_stopped', {
+              authAttemptId,
+            });
+          }
+          console.error('[amr-login] poll loop stopped without a terminal status', { nextStatus });
+        }
+        setAmrLoginError(t('settings.amrLoginErrorCompact'));
+        return false;
+      }
+    }
+    return false;
+  }
+
+  async function scanCliAgents(options: { preferExisting?: boolean } = {}) {
+    const scanToken = beginCliScan({ clearVisible: !options.preferExisting });
+    const currentCandidateAgents = agents.filter(
+      (agent) => agent.id !== 'amr' && (agent.available || deepSeekHarnessNeedsSetup(agent)),
+    );
+    const currentAvailableAgents = currentCandidateAgents.filter((agent) => agent.available);
+    if (options.preferExisting && currentCandidateAgents.length > 0) {
+      const selectedCliAgent = selectDefaultCliAgent(currentAvailableAgents);
+      showCliAgents(scanToken, currentCandidateAgents, { stagger: false });
+      setCliScanStatus('done');
+      emitPendingCliScanResult(scanToken, {
+        result: 'success',
+        detected: agents.length,
+        available: currentAvailableAgents.length,
+        selectedCliId: selectedCliAgent ? agentIdToTracking(selectedCliAgent.id) : undefined,
+      });
+      return currentAvailableAgents;
+    }
+    if (options.preferExisting && agentsLoading) {
+      showCliAgents(scanToken, currentCandidateAgents, { stagger: false });
+      return currentCandidateAgents;
+    }
+    cliRefreshPendingTokenRef.current = scanToken;
+    try {
+      const nextAgents = await onRefreshAgents();
+      if (cliScanTokenRef.current !== scanToken) return;
+      cliRefreshPendingTokenRef.current = null;
+      const availableAgents = nextAgents.filter((agent) => agent.available && agent.id !== 'amr');
+      const candidateAgents = nextAgents.filter(
+        (agent) => agent.id !== 'amr' && (agent.available || deepSeekHarnessNeedsSetup(agent)),
+      );
+      const selectedCliAgent = selectDefaultCliAgent(availableAgents);
+      // Scan-result semantics: zero available CLIs is a `failed` outcome
+      // because the user's runtime path is blocked, even though the
+      // detect call itself returned successfully. `detected_cli_count`
+      // separately reports the raw catalog so the dashboard can split
+      // "user has no CLI installed" from "detect crashed".
+      if (candidateAgents.length === 0) {
+        setCliScanStatus('done');
+        emitPendingCliScanResult(scanToken, {
+          result: 'failed',
+          detected: nextAgents.length,
+          available: 0,
+          errorCode: 'NO_AVAILABLE_CLI',
+        });
+        return;
+      }
+      emitPendingCliScanResult(scanToken, {
+  
