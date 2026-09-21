@@ -43,11 +43,9 @@ export async function streamMessage(
   history: ChatMessage[],
   signal: AbortSignal,
   handlers: StreamHandlers,
-  // Only the senseaudio / aihubmix branches read `context.projectId`
-  // today (so the daemon-side `generate_image` tool can write into the
-  // active project's folder). Other branches accept and ignore — keeping the
-  // signature uniform means the single call site in ProjectView passes
-  // the same shape regardless of protocol.
+  // senseaudio, aihubmix, and ollama read `context.projectId`.
+  // Ollama uses it for project file tools. The other two use it for
+  // generated media. Other branches accept and ignore the argument.
   context?: ProxyContext,
 ): Promise<void> {
   // Prefer the explicit Settings protocol; keep the legacy heuristic as a
@@ -56,7 +54,7 @@ export async function streamMessage(
     return streamMessageAzure(cfg, system, history, signal, handlers);
   }
   if (cfg.apiProtocol === 'ollama') {
-    return streamMessageOllama(cfg, system, history, signal, handlers);
+    return streamMessageOllama(cfg, system, history, signal, handlers, context);
   }
   if (cfg.apiProtocol === 'google') {
     return streamMessageGoogle(cfg, system, history, signal, handlers);

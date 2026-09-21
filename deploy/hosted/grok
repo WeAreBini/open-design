@@ -1,0 +1,8 @@
+#!/bin/sh
+# We Are Bini change. Apache License 2.0.
+# Grok stores sign-in under $HOME/.grok. The volume keeps that directory.
+# This wrapper is in the image, so a restart does not drop the binary.
+HOME="${OD_AGENT_HOME:-/app/.od/agent-home}"
+export HOME
+mkdir -p "$HOME"
+exec /opt/hosted-clis/lib/grok.bin "$@"

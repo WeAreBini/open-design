@@ -1,5 +1,10 @@
-ARG NODE_IMAGE=docker.io/library/node:24-alpine
-ARG RUNTIME_IMAGE=docker.io/library/node:24-alpine
+# We Are Bini hosted changes. Apache License 2.0.
+# Copyright 2026 Open Design contributors.
+# This image uses Debian so the GNU Claude binary runs without a volume glibc copy.
+# Claude, Codex, Grok, and DeepSeek Harness (`dsh`) are installed in the image.
+# Grok sign-in stays on the /app/.od volume. HTTP MCP is not started here.
+ARG NODE_IMAGE=docker.io/library/node:24-bookworm-slim
+ARG RUNTIME_IMAGE=docker.io/library/node:24-bookworm-slim
 
 FROM ${NODE_IMAGE} AS build
 
@@ -18,7 +23,8 @@ ENV no_proxy=${no_proxy}
 ENV NO_PROXY=${NO_PROXY}
 ENV CI=true
 
-RUN apk add --no-cache python3 make g++
+RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ ca-certificates git \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -33,8 +39,13 @@ RUN corepack enable && \
     pnpm install --frozen-lockfile
 
 COPY apps ./apps
+COPY deploy/hosted ./deploy/hosted
 RUN pnpm --filter @open-design/daemon build && \
     pnpm --filter @open-design/web build && \
+    pnpm --filter @open-design/dsh-runtime build && \
+    mkdir -p /app/deploy/dsh-companion && \
+    pnpm -C packages/dsh-runtime pack --pack-destination /app/deploy/dsh-companion && \
+    node deploy/hosted/write-dsh-manifest.mjs /app/deploy/dsh-companion && \
     pnpm --filter @open-design/daemon deploy --legacy --prod /app/deploy/daemon && \
     pnpm store prune && \
     rm -rf \
@@ -85,9 +96,16 @@ COPY plugins/_official ./plugins/_official
 
 FROM ${RUNTIME_IMAGE}
 
-RUN apk add --no-cache tini poppler-utils bash git && \
-    addgroup -S -g 1001 open-design && \
-    adduser -S -D -H -u 1001 -G open-design open-design
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      tini poppler-utils bash git ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system --gid 1001 open-design \
+    && useradd --system --uid 1001 --gid open-design --no-create-home --shell /usr/sbin/nologin open-design
+
+COPY deploy/hosted /tmp/hosted
+RUN node /tmp/hosted/install-clis.mjs && rm -rf /tmp/hosted
+COPY deploy/hosted/entrypoint.sh /usr/local/bin/open-design-hosted-entrypoint
+RUN chmod 755 /usr/local/bin/open-design-hosted-entrypoint
 
 WORKDIR /app
 COPY --from=build --chown=open-design:open-design /app/deploy/daemon ./apps/daemon
@@ -105,6 +123,7 @@ COPY --from=build --chown=open-design:open-design /app/assets/community-pets ./a
 # it on startup so the container ships with first-party atoms reachable
 # via the same registry path third-party plugins use.
 COPY --from=build --chown=open-design:open-design /app/plugins/_official ./plugins/_official
+COPY --from=build --chown=open-design:open-design /app/deploy/dsh-companion /app/agent-runtimes/deepseek-harness
 
 RUN mkdir -p /app/.od && \
     chown -R open-design:open-design /app
@@ -113,9 +132,15 @@ ENV NODE_ENV=production
 ENV NODE_OPTIONS=--max-old-space-size=192
 ENV OD_BIND_HOST=0.0.0.0
 ENV OD_PORT=7456
+ENV PATH="/opt/hosted-clis/bin:${PATH}"
+ENV CLAUDE_BIN=/opt/hosted-clis/bin/claude
+ENV CODEX_BIN=/opt/hosted-clis/bin/codex
+ENV DSH_BIN=/opt/hosted-clis/bin/dsh
+ENV OD_AGENT_HOME=/app/.od/agent-home
+ENV DSH_HOME=/app/.od/agent-home/.dsh
 
 EXPOSE 7456
 
 USER open-design
-ENTRYPOINT ["/sbin/tini", "--"]
+ENTRYPOINT ["/usr/local/bin/open-design-hosted-entrypoint"]
 CMD ["node", "apps/daemon/dist/cli.js", "--no-open"]
