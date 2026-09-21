@@ -10,9 +10,9 @@
     "version": "0.153.4"
   },
   "grok": {
-    "url": "https://x.ai/cli/grok-1.0.22-linux-x86_64",
-    "sha256": "ad2510e8d7edcfe04fbdd25fa0f19dd1fb5babc8b238532b06e4bf3548d210ad",
-    "version": "1.0.22"
+    "url": "https://x.ai/cli/grok-1.0.40-linux-x86_64",
+    "sha256": "92c997dfd109c0672d40d5ae6fbd15835d53ffaf12cf9ea124d22aaef3ff23fc",
+    "version": "1.0.40"
   },
   "dsh": {
     "version": "0.1.1-rc.2"
