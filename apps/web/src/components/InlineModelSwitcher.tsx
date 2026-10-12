@@ -1003,8 +1003,8 @@ export function InlineModelSwitcher({
   // serves both surfaces and replaces any stale slot.
   useEffect(() => {
     if (!open || config.mode !== 'api' || !onProviderModelsCacheChange) return;
-    if (apiProtocol === 'azure' || apiProtocol === 'ollama') return;
-    if (apiProtocol !== 'aihubmix' && !config.apiKey.trim()) return;
+    if (apiProtocol === 'azure') return;
+    if (apiProtocol !== 'aihubmix' && apiProtocol !== 'ollama' && !config.apiKey.trim()) return;
     const baseUrl = config.baseUrl.trim();
     if (!/^https?:\/\//i.test(baseUrl)) return;
     const key = providerModelsKey;
