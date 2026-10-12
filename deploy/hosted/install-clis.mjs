@@ -16,7 +16,8 @@ const bindir = path.join(prefix, 'bin');
 const lock = JSON.parse(await readFile(path.join(here, 'linux-clis.lock.json'), 'utf8'));
 
 async function download(url, sha256) {
-  const response = await fetch(url, { redirect: 'error' });
+  // GitHub release URLs answer 302. Follow that redirect, then check the bytes.
+  const response = await fetch(url, { redirect: 'follow' });
   if (!response.ok) throw new Error(`Download failed ${response.status} ${url}`);
   const bytes = Buffer.from(await response.arrayBuffer());
   const actual = createHash('sha256').update(bytes).digest('hex');

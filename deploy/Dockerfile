@@ -3,8 +3,9 @@
 # This image uses Debian so the GNU Claude binary runs without a volume glibc copy.
 # Claude, Codex, Grok, and DeepSeek Harness (`dsh`) are installed in the image.
 # Grok sign-in stays on the /app/.od volume. HTTP MCP is not started here.
-ARG NODE_IMAGE=docker.io/library/node:24-bookworm-slim
-ARG RUNTIME_IMAGE=docker.io/library/node:24-bookworm-slim
+# Same Debian bookworm image as .github/workflows/docker-image.yml.
+ARG NODE_IMAGE=public.ecr.aws/docker/library/node:24-bookworm-slim
+ARG RUNTIME_IMAGE=public.ecr.aws/docker/library/node:24-bookworm-slim
 
 FROM ${NODE_IMAGE} AS build
 
