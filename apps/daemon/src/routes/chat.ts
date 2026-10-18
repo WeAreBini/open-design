@@ -24,6 +24,12 @@ import {
   type BYOKToolContext,
   type ImageToolResult,
 } from '../byok-tools.js';
+// We Are Bini change. Apache License 2.0. Ollama chat can read and write project files.
+import {
+  OLLAMA_PROJECT_FILE_TOOLS,
+  executeOllamaProjectTool,
+  ollamaToolCallsFromMessage,
+} from '../ollama-project-files.js';
 import {
   AIHUBMIX_DEFAULT_BASE_URL,
   aihubmixHeaders,
@@ -1395,9 +1401,13 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
   app.post('/api/proxy/ollama/stream', async (req, res) => {
     const proxyBody = req.body || {};
     if (rejectProxyPluginContext(proxyBody, res)) return;
-    const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens } = proxyBody;
+    const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens, projectId } = proxyBody;
     if (!apiKey || !model) {
       return sendApiError(res, 400, 'BAD_REQUEST', 'apiKey and model are required');
+    }
+    const projectTools = typeof projectId === 'string' && projectId.length > 0;
+    if (projectTools && !isSafeProjectId(projectId)) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'projectId must be a safe identifier');
     }
 
     const effectiveBaseUrl = baseUrl || 'https://ollama.com';
@@ -1428,58 +1438,77 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       payloadMessages.unshift({ role: 'system', content: systemPrompt });
     }
 
-    const payload: any = { model, messages: payloadMessages, stream: true };
-    if (typeof maxTokens === 'number' && maxTokens > 0) {
-      payload.options = { num_predict: maxTokens };
-    }
-
     const sse = createSseResponse(res);
     let proxyDispatcher: ReturnType<typeof proxyDispatcherRequestInit> | null = null;
     try {
       proxyDispatcher = proxyDispatcherRequestInit();
       const signal = clientDisconnectSignal(res);
       sse.send('start', { model });
-      const response = await fetch(url, {
-        ...proxyDispatcher.requestInit,
-        signal,
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify(payload),
-        redirect: 'error',
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[proxy:ollama] upstream error: ${response.status} ${redactAuthTokens(errorText)}`);
-        sendProxyError(sse, `Upstream error: ${response.status}`, {
-          code: proxyErrorCode(response.status),
-          details: errorText,
-          retryable: response.status === 429 || response.status >= 500,
-        });
-        return sse.end();
-      }
-
-      let ended = false;
       const guard = createDeltaGuard(sse);
-      await streamUpstreamNdjson(response, ({ data }: any) => {
-        if (!data) return false;
-        if (data.done) {
-          sse.send('end', {});
-          ended = true;
-          return true;
+      let conversation = payloadMessages;
+      const maxLoops = projectTools ? 8 : 1;
+      for (let loop = 0; loop < maxLoops; loop += 1) {
+        const payload: any = { model, messages: conversation, stream: true };
+        if (typeof maxTokens === 'number' && maxTokens > 0) {
+          payload.options = { num_predict: maxTokens };
         }
-        const content = data.message?.content;
-        if (typeof content === 'string' && content) { 
-          guard.sendDelta(content); 
-          if (guard.contaminated) { 
-            sse.send('end', {}); 
-            ended = true; 
-            return true; 
-          } 
+        if (projectTools) payload.tools = OLLAMA_PROJECT_FILE_TOOLS;
+        const response = await fetch(url, {
+          ...proxyDispatcher.requestInit,
+          signal,
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+          body: JSON.stringify(payload),
+          redirect: 'error',
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`[proxy:ollama] upstream error: ${response.status} ${redactAuthTokens(errorText)}`);
+          sendProxyError(sse, `Upstream error: ${response.status}`, {
+            code: proxyErrorCode(response.status),
+            details: errorText,
+            retryable: response.status === 429 || response.status >= 500,
+          });
+          return sse.end();
         }
-        return false;
-      });
-      if (!ended) sse.send('end', {});
+
+        let assistantMessage: Record<string, unknown> | null = null;
+        let toolCalls = ollamaToolCallsFromMessage(null);
+        let stopForGuard = false;
+        await streamUpstreamNdjson(response, ({ data }: any) => {
+          if (!data) return false;
+          if (data.message && typeof data.message === 'object') {
+            const found = ollamaToolCallsFromMessage(data.message);
+            if (found.length > 0) {
+              toolCalls = found;
+              assistantMessage = data.message;
+            }
+          }
+          const content = data.message?.content;
+          if (typeof content === 'string' && content && toolCalls.length === 0) {
+            guard.sendDelta(content);
+            if (guard.contaminated) {
+              stopForGuard = true;
+              sse.send('end', {});
+              return true;
+            }
+          }
+          return Boolean(data.done);
+        });
+        if (stopForGuard || !projectTools || toolCalls.length === 0) break;
+        const toolMessages = [];
+        for (const call of toolCalls) {
+          const result = await executeOllamaProjectTool(ctx.paths.PROJECTS_DIR, projectId, call);
+          toolMessages.push({ role: 'tool', tool_name: call.name, content: result });
+        }
+        conversation = [
+          ...conversation,
+          assistantMessage ?? { role: 'assistant', content: '', tool_calls: toolCalls },
+          ...toolMessages,
+        ];
+      }
+      if (!guard.contaminated) sse.send('end', {});
       sse.end();
     } catch (err: any) {
       console.error(`[proxy:ollama] internal error: ${err.message}`);
