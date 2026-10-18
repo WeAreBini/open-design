@@ -492,9 +492,9 @@ describe('POST /api/provider/models', () => {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        protocol: 'ollama',
-        baseUrl: 'https://ollama.com',
-        apiKey: 'ollama-key',
+        protocol: 'azure',
+        baseUrl: 'https://example.openai.azure.com',
+        apiKey: 'azure-key',
       }),
     });
     const body = (await res.json()) as Record<string, unknown>;
