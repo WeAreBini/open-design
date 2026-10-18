@@ -67,6 +67,10 @@ const residualSkippedDirectories = new Set([
 ]);
 
 const residualAllowedExactPaths = new Set([
+  // Hosted image scripts. deploy/Dockerfile runs these with node during the
+  // image build, before any TypeScript emit exists.
+  "deploy/hosted/install-clis.mjs",
+  "deploy/hosted/write-dsh-manifest.mjs",
   // esbuild config entrypoints are executed directly by Node before package
   // dist output exists.
   "packages/agui-adapter/esbuild.config.mjs",
