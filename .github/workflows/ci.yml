@@ -31,10 +31,12 @@ concurrency:
 jobs:
   runners:
     name: Resolve runner profiles
-    # Resolve on the Nexu ARC fleet for trusted branches, but preserve the
-    # hosted bootstrap path for external forks and explicit economic mode.
+    # Resolve on the Nexu ARC fleet for trusted branches of nexu-io/open-design,
+    # but preserve the hosted bootstrap path for external forks, repositories
+    # that do not have that fleet, and explicit economic mode.
     runs-on: >-
-      ${{ ((github.event_name == 'pull_request'
+      ${{ (github.repository != 'nexu-io/open-design'
+        || (github.event_name == 'pull_request'
         && github.event.pull_request.head.repo.full_name != github.repository)
         || vars.OD_CI_RUNNER_MODE == 'economic')
         && 'ubuntu-24.04'
@@ -50,13 +52,16 @@ jobs:
       - name: Resolve runner profiles
         id: runners
         env:
-          # Fork PRs cannot rely on repository variables, so keep their required
-          # validation on GitHub-hosted runners even when private pools are down.
+          # Fork PRs and repositories other than nexu-io/open-design cannot rely
+          # on the Nexu ARC fleet, so keep their required validation on
+          # GitHub-hosted runners even when private pools are down.
           OD_CI_RUNNER_MODE: >-
-            ${{ github.event_name == 'pull_request'
+            ${{ github.repository != 'nexu-io/open-design'
+              && 'economic'
+              || (github.event_name == 'pull_request'
               && github.event.pull_request.head.repo.full_name != github.repository
               && 'economic'
-              || vars.OD_CI_RUNNER_MODE }}
+              || vars.OD_CI_RUNNER_MODE) }}
         run: python3 .github/scripts/runners.py
 
   plan:
