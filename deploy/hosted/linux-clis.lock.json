@@ -1,0 +1,20 @@
+{
+  "claude": {
+    "url": "https://registry.npmjs.org/@anthropic-ai/claude-agent-sdk-linux-x64/-/claude-agent-sdk-linux-x64-0.3.263.tgz",
+    "sha256": "f07fcb22da213dae5c03bdc01c37f4cc0588441e1128220102fdeb8f25f4dd63",
+    "version": "2.1.263"
+  },
+  "codex": {
+    "url": "https://github.com/openai/codex/releases/download/rust-v0.153.4/codex-package-x86_64-unknown-linux-musl.tar.gz",
+    "sha256": "a822187e1a2420c61c5926721bfbd878701ed95547c9bb0d4de4498a16ba1821",
+    "version": "0.153.4"
+  },
+  "grok": {
+    "url": "https://x.ai/cli/grok-1.0.40-linux-x86_64",
+    "sha256": "92c997dfd109c0672d40d5ae6fbd15835d53ffaf12cf9ea124d22aaef3ff23fc",
+    "version": "1.0.40"
+  },
+  "dsh": {
+    "version": "0.1.1-rc.2"
+  }
+}

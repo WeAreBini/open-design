@@ -118,16 +118,46 @@ jobs:
           push: ${{ steps.mode.outputs.publish == 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # The in-tree Dockerfile uses node:24-alpine + apk for build
-          # tooling; we keep that default so the workflow doesn't drift
-          # from local builds. Spec §15.1 nominates bookworm-slim as
-          # the canonical base; switching is a follow-up that needs
-          # the Dockerfile's apk lines re-cast for apt.
+          # Same Debian bookworm image as deploy/Dockerfile. Do not pass Alpine here.
+          # apt-get in that Dockerfile needs bookworm. A single-arch smoke build
+          # loads the image so the health step can run it.
+          load: ${{ steps.mode.outputs.publish != 'true' }}
+          provenance: ${{ steps.mode.outputs.publish == 'true' }}
+          sbom: ${{ steps.mode.outputs.publish == 'true' }}
           build-args: |
-            NODE_IMAGE=public.ecr.aws/docker/library/node:24-alpine
-            RUNTIME_IMAGE=public.ecr.aws/docker/library/node:24-alpine
+            NODE_IMAGE=public.ecr.aws/docker/library/node:24-bookworm-slim
+            RUNTIME_IMAGE=public.ecr.aws/docker/library/node:24-bookworm-slim
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Run the image and check health
+        if: ${{ steps.mode.outputs.publish != 'true' }}
+        shell: bash
+        env:
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+          image="$(printf '%s\n' "$IMAGE_TAGS" | head -n 1)"
+          test -n "$image"
+          docker rm -f od-health >/dev/null 2>&1 || true
+          # The image binds 0.0.0.0 and refuses to start without a token.
+          # This token exists only for this smoke container.
+          docker run -d --name od-health \
+            -e OD_API_TOKEN=open-design-ci-health \
+            -p 127.0.0.1:7456:7456 \
+            "$image"
+          trap 'docker logs od-health || true; docker rm -f od-health >/dev/null 2>&1 || true' EXIT
+          body=""
+          for _ in $(seq 1 90); do
+            if body="$(curl -fsS http://127.0.0.1:7456/api/health)"; then
+              break
+            fi
+            body=""
+            sleep 2
+          done
+          test -n "$body"
+          printf '%s\n' "$body"
+          printf '%s' "$body" | node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{const j=JSON.parse(s); if(j.ok!==true) process.exit(1);});'
 
       - name: Verify public GHCR pull access
         if: ${{ steps.mode.outputs.publish == 'true' }}
