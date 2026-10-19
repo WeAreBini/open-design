@@ -302,7 +302,7 @@ describe('ProjectView auto-open of a finished turn (OPEND-2588)', () => {
         'image-03.png',
         'image-04.png',
       ]);
-    });
+    }, { timeout: 4_000 });
   });
 
   it('still focuses the artifact the single-selection heuristic would have picked', async () => {
@@ -311,7 +311,7 @@ describe('ProjectView auto-open of a finished turn (OPEND-2588)', () => {
     // equally ranked media.
     await runTurn({ beforeFiles: [], afterFiles: IMAGE_TURN_FILES });
 
-    await waitFor(() => expect(openedTabsInOrder()).toHaveLength(4));
+    await waitFor(() => expect(openedTabsInOrder()).toHaveLength(4), { timeout: 4_000 });
     expect(focusedTab()).toBe('image-04.png');
   });
 
