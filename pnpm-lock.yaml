@@ -331,8 +331,8 @@ importers:
         specifier: 5.5.0
         version: 5.5.0
       dompurify:
-        specifier: 3.4.2
-        version: 3.4.2
+        specifier: 3.4.16
+        version: 3.4.16
       jspdf:
         specifier: 4.2.1
         version: 4.2.1
@@ -4494,8 +4494,8 @@ packages:
     resolution: {integrity: sha512-cgwlv/1iFQiFnU96XXgROh8xTeetsnJiDsTc7TYCLFd9+/WNkIqPTxiM/8pSd8VIrhXGTf1Ny1q1hquVqDJB5w==}
     engines: {node: '>= 4'}
 
-  dompurify@3.4.2:
-    resolution: {integrity: sha512-lHeS9SA/IKeIFFyYciHBr2n0v1VMPlSj843HdLOwjb2OxNwdq9Xykxqhk+FE42MzAdHvInbAolSE4mhahPpjXA==}
+  dompurify@3.4.16:
+    resolution: {integrity: sha512-sqo+pNp3qRhCIpbgRi1y8Tgk27Bo2Ry7w0dC1NBeNTdZChWjz9Xb/KOoZbRP/R6pQZ80Qw8YhXw13hWWBbMRnQ==}
 
   domutils@3.2.2:
     resolution: {integrity: sha512-6kZKyUajlDuqlHKVX1w7gyslj9MPIXzIFiz/rGu35uC1wMi+kMhQwGhl4lt9unC9Vb9INnY9Z3/ZA3+FhASLaw==}
@@ -10429,7 +10429,7 @@ snapshots:
     dependencies:
       domelementtype: 2.3.0
 
-  dompurify@3.4.2:
+  dompurify@3.4.16:
     optionalDependencies:
       '@types/trusted-types': 2.0.7
 
@@ -11330,7 +11330,7 @@ snapshots:
     optionalDependencies:
       canvg: 3.0.11
       core-js: 3.49.0
-      dompurify: 3.4.2
+      dompurify: 3.4.16
       html2canvas: 1.4.1
 
   jszip@3.10.1:
@@ -11514,7 +11514,7 @@ snapshots:
       d3-sankey: 0.12.3
       dagre-d3-es: 7.0.14
       dayjs: 1.11.21
-      dompurify: 3.4.2
+      dompurify: 3.4.16
       es-toolkit: 1.49.0
       katex: 0.16.47
       khroma: 2.1.0
@@ -12084,7 +12084,7 @@ snapshots:
       '@posthog/core': 1.29.5
       '@posthog/types': 1.374.2
       core-js: 3.49.0
-      dompurify: 3.4.2
+      dompurify: 3.4.16
       fflate: 0.4.8
       preact: 10.29.1
       query-selector-shadow-dom: 1.0.1

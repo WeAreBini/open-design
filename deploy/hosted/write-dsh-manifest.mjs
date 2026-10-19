@@ -1,4 +1,6 @@
 // We Are Bini change. Apache License 2.0. Copyright 2026 Open Design contributors.
+// Node runs this file during the image build.
+// The image build reads this manifest after the tarball is packed.
 import { createHash } from 'node:crypto';
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
