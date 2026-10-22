@@ -1,0 +1,272 @@
+/* ============================================================
+   Plugins home section — gallery layout.
+
+   The gallery now renders large preview tiles (image / video /
+   sandboxed HTML / design-system patch) instead of text-only
+   cards, so the home view reads more like a Lovart-style
+   inspiration board. The faceted filter row above the grid is
+   unchanged; only the card visuals + grid sizing changed.
+   ============================================================ */
+.plugins-home {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.plugins-home__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.plugins-home__heading {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.plugins-home__subtitle {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+.plugins-home__title {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-strong);
+  letter-spacing: -0.01em;
+}
+.plugins-home__count {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.plugins-home__head-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+.plugins-home__search {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 200px;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-panel);
+  transition: border-color 120ms var(--ease-out), background-color 120ms var(--ease-out),
+    box-shadow 120ms var(--ease-out);
+}
+.plugins-home__search:focus-within {
+  border-color: var(--border-strong);
+}
+.plugins-home__search-icon {
+  position: absolute;
+  left: 10px;
+  color: var(--text-faint);
+  pointer-events: none;
+}
+/* The bare <input> below picks up the global `input { ... }` rule
+   from index.css (border, radius-sm, padding, and a rectangular
+   focus box-shadow). We override every property the parent pill
+   already provides so the focus halo only paints once, on the
+   pill-shaped container, and the input renders flush inside it. */
+.plugins-home__search .plugins-home__search-input,
+.plugins-home__search .plugins-home__search-input:focus {
+  appearance: none;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 6px 28px;
+  font-size: 12px;
+  color: var(--text);
+  outline: none;
+  box-shadow: none;
+  border-radius: var(--radius-pill);
+  font-family: inherit;
+}
+.plugins-home__search-input::placeholder {
+  color: var(--text-faint);
+}
+.plugins-home__search-input::-webkit-search-cancel-button,
+.plugins-home__search-input::-webkit-search-decoration {
+  appearance: none;
+  display: none;
+}
+/* Override the shared <Button> component's own padding (6/12) and sizing.
+   The reset must be scoped under `.plugins-home__search` so it out-specifies
+   the Button CSS-module class (`.button_button__…`); a bare
+   `.plugins-home__search-clear` only ties that class and loses, leaving the
+   24px horizontal padding to crush the X glyph down to zero width. */
+.plugins-home__search .plugins-home__search-clear {
+  position: absolute;
+  right: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  min-width: 0;
+  padding: 0;
+  border-radius: 50%;
+  color: var(--text-muted);
+  transition: background-color 120ms var(--ease-out), color 120ms var(--ease-out);
+}
+.plugins-home__search .plugins-home__search-clear:hover {
+  background: var(--border-soft, var(--border));
+  border-color: transparent;
+  color: var(--text);
+}
+.plugins-home__search .plugins-home__search-clear:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+@media (max-width: 720px) {
+  .plugins-home__head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .plugins-home__head-tools {
+    justify-content: flex-end;
+  }
+  .plugins-home__facet-tools {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .plugins-home__search {
+    flex: 1;
+    min-width: 0;
+  }
+}
+.plugins-home__empty {
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 20px 16px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  text-align: center;
+}
+.plugins-home__empty code {
+  font-size: 12px;
+  background: var(--bg-subtle);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+/* ============================================================
+   Faceted filter — a single combined bar. An optional Saved chip
+   (rich layout only) + category pills live on the left, the search
+   field + clear-filters affordance live on the right.
+   ============================================================ */
+.plugins-home__chip {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 120ms var(--ease-out), background-color 120ms var(--ease-out), color 120ms var(--ease-out);
+}
+.plugins-home__chip:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+.plugins-home__chip-count {
+  font-size: 12px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.plugins-home__chip--saved {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  color: var(--accent);
+  background: var(--accent-tint);
+}
+.plugins-home__chip--saved.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+.plugins-home__chip--saved.is-active .plugins-home__chip-count {
+  color: white;
+  opacity: 0.85;
+}
+
+.plugins-home__linkbtn {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.plugins-home__linkbtn:hover {
+  color: var(--text);
+}
+
+.plugins-home__facets {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* Pin the Scenario row (and the optional advanced panel below it)
+     directly under the sticky topbar so the category bar stays
+     reachable while the plugin grid scrolls underneath -- mirrors
+     the Lovart-style category bar. The opaque background keeps
+     scrolling tiles cleanly clipped behind the strip. The
+     --entry-topbar-h variable is defined on .entry-main--scroll. */
+  position: sticky;
+  top: var(--entry-topbar-h, 56px);
+  z-index: 5;
+  background: var(--bg);
+}
+.plugins-home__facet-row {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  align-items: start;
+  gap: 12px;
+}
+.plugins-home__facet-row--inline {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 4px 0;
+}
+/* Right-aligned cluster paired with the chip strip on the same row.
+   Hosts the search input, the filtered-count, and a clear-filters
+   link when at least one facet is active. It can wrap under the
+   chip strip on constrained viewports instead of forcing a local
+   horizontal scrollbar. */
+.plugins-home__facet-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 1 240px;
+  margin-left: auto;
+  min-width: min(100%, 200px);
+}
+.plugins-home__facet-row--sub {
+  padding-top: 0;
+  opacity: 0.92;
+}
+.plugins-home__facet-row--inline .plugins-home__facet-pills {
+  flex: 1 1 360px;
+  flex-wrap: wrap;
+  overflow: visible;
+}
+.plugins-home__facet-row--inline .plugins-home__pill,
+.plugins-home__facet-row--inline .plugins-home__chip {
+  flex: 0 0 auto;
+}
