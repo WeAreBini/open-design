@@ -106,7 +106,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY deploy/hosted /tmp/hosted
 RUN node /tmp/hosted/install-clis.mjs && rm -rf /tmp/hosted
 COPY deploy/hosted/entrypoint.sh /usr/local/bin/open-design-hosted-entrypoint
-RUN chmod 755 /usr/local/bin/open-design-hosted-entrypoint
+# Improve Prompt progress client (od-bini.js). Re-asserted at boot over volume
+# copies; does not change Grok auth or /api/bini/improve-prompt.
+COPY deploy/hosted/bini /app/deploy/hosted/bini
+RUN chmod 755 /usr/local/bin/open-design-hosted-entrypoint \
+      /app/deploy/hosted/bini/bin/install-improve-prompt-client.sh \
+ && chown -R open-design:open-design /app/deploy/hosted/bini
 
 WORKDIR /app
 COPY --from=build --chown=open-design:open-design /app/deploy/daemon ./apps/daemon
