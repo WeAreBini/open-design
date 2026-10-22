@@ -1,0 +1,246 @@
+.plugins-home__gallery-frame {
+  position: relative;
+  /* Keep the original landscape preview proportion (≈4:3) regardless of how
+     wide the fixed 4-column grid makes each card, instead of a fixed pixel
+     height that turns narrower cards squarish. */
+  height: auto;
+  aspect-ratio: 4 / 3;
+  background: #fff;
+  overflow: hidden;
+}
+/* PreviewSurface fills the fixed-height gallery frame instead of its
+   default 4/3 aspect box. */
+.plugins-home__card--gallery .plugins-home__preview {
+  position: absolute;
+  inset: 0;
+  aspect-ratio: auto;
+  height: 100%;
+}
+.plugins-home__card--gallery .plugins-home__html-iframe {
+  width: 1440px;
+  height: 2200px;
+  transform: scale(0.32);
+  transition: transform 320ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+/* Hover zooms the scaled preview in place (0.32 × 1.04), matching the home
+   recent-projects cover zoom — replaces the old 6s scroll-pan reveal. The
+   iframe stays inert (pointer-events: none, inherited) so a click anywhere on
+   the tile opens the detail modal rather than being swallowed by the page. */
+.plugins-home__card--gallery:hover .plugins-home__html-iframe {
+  transform: scale(0.3328);
+}
+/* Decks render inside a 16:9 frame. The tall scroll-preview viewport above would
+   letterbox them; instead give deck tiles a 16:9 box and render the iframe at a
+   fixed 1280×720 logical viewport scaled down to fit (--deck-preview-scale,
+   measured per-card in PluginCard). Filling the frame natively (transform:none)
+   only worked for decks that self-scale to their viewport; a fixed-pixel-canvas
+   template then overflowed the small iframe into an overlapping mess. Rendering
+   at the design width and scaling to fit — the PreviewModal approach — previews
+   every template proportionally, and skips the scroll-pan (nothing to reveal). */
+.plugins-home__card--gallery[data-od-mode="deck"] .plugins-home__gallery-frame {
+  /* Replace the fixed 300px scroll-preview frame with a 16:9 box so the scaled
+     deck slide fills it exactly — no dark letterbox band, no leftover strip. */
+  height: auto;
+  aspect-ratio: 16 / 9;
+  --deck-preview-scale: 0.208;
+}
+.plugins-home__card--gallery[data-od-mode="deck"] .plugins-home__html-iframe,
+.plugins-home__card--gallery[data-od-mode="deck"]:hover .plugins-home__html-iframe {
+  top: 0;
+  left: 0;
+  width: 1280px;
+  height: 720px;
+  transform: scale(var(--deck-preview-scale));
+  transform-origin: top left;
+  transition: none;
+}
+
+/* ---------- Hero preview surface ---------- */
+.plugins-home__preview {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  background: var(--bg-subtle);
+  overflow: hidden;
+}
+.plugins-home__preview--design,
+.plugins-home__preview--text {
+  background: transparent;
+}
+
+/* Image / video */
+.plugins-home__media {
+  position: absolute;
+  inset: 0;
+}
+.plugins-home__media-img,
+.plugins-home__media-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 320ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.plugins-home__media-video {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  /* Inline `opacity` (videoReady gate in MediaSurface) fades the clip in once
+     it reports a real decoded frame, instead of popping — see that gate's
+     comment for why it exists (a black first-frame flash on some Chromium
+     builds). */
+  transition: transform 320ms cubic-bezier(0.23, 1, 0.32, 1), opacity 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.plugins-home__media-skeleton {
+  width: 100%;
+  height: 100%;
+  background:
+    linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, 0.5) 50%, transparent 70%) 0 0 / 200% 100%,
+    var(--bg-subtle);
+}
+.plugins-home__media-skeleton.is-active {
+  animation: plugins-home-shimmer 1.6s ease-in-out infinite;
+}
+.plugins-home__media-fallback {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 22% 18%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 34%),
+    linear-gradient(135deg, color-mix(in srgb, var(--accent-tint) 64%, white), var(--bg-subtle));
+}
+.plugins-home__media-fallback-glyph {
+  color: color-mix(in srgb, var(--accent) 74%, var(--text));
+  font-family: var(--serif);
+  font-size: 52px;
+  font-weight: 600;
+  line-height: 1;
+  opacity: 0.86;
+}
+@keyframes plugins-home-shimmer {
+  to {
+    background-position: -200% 0, 0 0;
+  }
+}
+/* Sandboxed HTML iframe — scaled-down "thumbnail" of a real page */
+.plugins-home__html {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+}
+.plugins-home__html-frame {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+}
+.plugins-home__html-iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1440px;
+  height: 1080px;
+  border: 0;
+  transform: scale(0.22);
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+.plugins-home__html-skeleton {
+  position: absolute;
+  inset: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.plugins-home__html-skeleton span {
+  height: 8px;
+  border-radius: var(--radius-xs);
+  background: linear-gradient(90deg, var(--bg-subtle), var(--border-soft), var(--bg-subtle));
+  background-size: 200% 100%;
+}
+.plugins-home__html-skeleton.is-active span {
+  animation: plugins-home-shimmer 1.6s ease-in-out infinite;
+}
+.plugins-home__html-skeleton span:nth-child(1) { width: 70%; }
+.plugins-home__html-skeleton span:nth-child(2) { width: 90%; }
+.plugins-home__html-skeleton span:nth-child(3) { width: 55%; }
+.plugins-home__html-chrome {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-top: 1px solid var(--border-soft);
+  background: var(--bg-subtle);
+  font-size: 12px;
+  color: var(--text-faint);
+}
+.plugins-home__html-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--border-strong);
+}
+.plugins-home__html-dot:nth-child(1) { background: #ff5f57; }
+.plugins-home__html-dot:nth-child(2) { background: #febc2e; }
+.plugins-home__html-dot:nth-child(3) { background: #28c840; }
+.plugins-home__html-url {
+  margin-left: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Reachability-fallback tile — rendered when /api/plugins/<id>/preview
+   returns non-2xx. Mirrors the iframe card chrome (mac dots + url
+   strip) so the row keeps a uniform rhythm, but pretends the iframe
+   is a glyph patch so the tile never paints empty white. */
+.plugins-home__html--fallback {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  color: rgba(255, 255, 255, 0.92);
+  font-family: var(--serif);
+}
+.plugins-home__html-fallback-glyph {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 64px;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  text-shadow: 0 4px 24px rgba(0, 0, 0, 0.45);
+  user-select: none;
+  font-weight: 600;
+}
+.plugins-home__html--fallback .plugins-home__html-chrome {
+  background: rgba(0, 0, 0, 0.32);
+  color: rgba(255, 255, 255, 0.78);
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  -webkit-backdrop-filter: blur(var(--material-thin-blur));
+  backdrop-filter: blur(var(--material-thin-blur));
+}
+
+/* Design-system showcase tile */
+.plugins-home__design {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 18px 18px 14px;
+  font-family: var(--serif);
+  overflow: hidden;
+}
+.plugins-home__design--showcase {
+  display: block;
+  padding: 0;
+  background: var(--bg-panel);
+  font-family: inherit;
+}
