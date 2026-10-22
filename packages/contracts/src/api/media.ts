@@ -184,6 +184,13 @@ const BARE_STATUS_RE =
 const MISSING_CREDENTIAL_RE = /\bno\s+(?:[\w.-]+\s+){0,3}(?:api key|credential)\b/i;
 /** Every long-poll adapter gives up with this exact phrase. */
 const RENDER_TIMED_OUT_RE = /\bdid not finish in time\b/i;
+/**
+ * HyperFrames on a daemon without the Electron sidecar and without
+ * `HYPERFRAMES_BROWSER_PATH` — retry cannot invent a frame renderer.
+ * Map to `update-app` (desktop) / hosted ops must set a browser path.
+ */
+const HYPERFRAMES_RENDERER_MISSING_RE =
+  /\bdesktop frame renderer is unavailable\b|\bBundled HyperFrames CLI is unavailable\b/i;
 
 function nextStepForStatus(
   status: number,
@@ -237,6 +244,7 @@ export function mediaFailureNextStep(signal: MediaFailureSignal): MediaFailureNe
     }
     if (MISSING_CREDENTIAL_RE.test(message)) return 'open-settings';
     if (RENDER_TIMED_OUT_RE.test(message)) return 'retry-later';
+    if (HYPERFRAMES_RENDERER_MISSING_RE.test(message)) return 'update-app';
   }
 
   if (signal.retryable === true) return 'retry-later';

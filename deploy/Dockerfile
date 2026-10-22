@@ -97,14 +97,19 @@ COPY plugins/_official ./plugins/_official
 
 FROM ${RUNTIME_IMAGE}
 
+# Chromium is required for HyperFrames on hosted (no Electron sidecar).
+# HYPERFRAMES_BROWSER_PATH selects the headless escape hatch in the daemon.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       tini poppler-utils bash git ca-certificates curl \
+      chromium fonts-liberation fonts-noto-core \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system --gid 1001 open-design \
     && useradd --system --uid 1001 --gid open-design --no-create-home --shell /usr/sbin/nologin open-design
 
 COPY deploy/hosted /tmp/hosted
-RUN node /tmp/hosted/install-clis.mjs && rm -rf /tmp/hosted
+RUN node /tmp/hosted/install-clis.mjs \
+    && install -m 755 /tmp/hosted/od-hyperframes-chromium.sh /usr/local/bin/od-hyperframes-chromium \
+    && rm -rf /tmp/hosted
 COPY deploy/hosted/entrypoint.sh /usr/local/bin/open-design-hosted-entrypoint
 RUN chmod 755 /usr/local/bin/open-design-hosted-entrypoint
 
@@ -139,7 +144,9 @@ ENV CODEX_BIN=/opt/hosted-clis/bin/codex
 ENV DSH_BIN=/opt/hosted-clis/bin/dsh
 ENV OD_AGENT_HOME=/app/.od/agent-home
 ENV DSH_HOME=/app/.od/agent-home/.dsh
-
+# HyperFrames HTML→MP4 on Railway / hosted (no desktop Electron frame renderer).
+# Wrapper adds --no-sandbox flags Chromium needs inside a container.
+ENV HYPERFRAMES_BROWSER_PATH=/usr/local/bin/od-hyperframes-chromium
 EXPOSE 7456
 
 USER open-design

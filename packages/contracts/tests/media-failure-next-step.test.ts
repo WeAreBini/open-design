@@ -117,6 +117,20 @@ describe('mediaFailureNextStep', () => {
       expect(mediaFailureNextStep({ code: 'MEDIA_CLI_INCOMPATIBLE' })).toBe('update-app');
     });
 
+    it('names a missing HyperFrames frame renderer as an app/runtime update', () => {
+      expect(
+        mediaFailureNextStep({
+          message:
+            'hyperframes render failed: Open Design desktop frame renderer is unavailable. Open or upgrade the desktop client and try again.',
+        }),
+      ).toBe('update-app');
+      expect(
+        mediaFailureNextStep({
+          message: 'Bundled HyperFrames CLI is unavailable. Reinstall Open Design so its pinned HyperFrames runtime matches.',
+        }),
+      ).toBe('update-app');
+    });
+
     it('names a policy denial as "this run does not do that"', () => {
       expect(mediaFailureNextStep({ code: 'MEDIA_EXECUTION_DISABLED' })).toBe('unsupported');
       expect(mediaFailureNextStep({ code: 'MEDIA_SURFACE_DENIED' })).toBe('unsupported');
