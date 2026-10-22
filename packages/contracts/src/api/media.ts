@@ -182,8 +182,8 @@ const BARE_STATUS_RE =
 
 /** `no Fal API key — configure it in …`, `no OpenAI credential — …`. */
 const MISSING_CREDENTIAL_RE = /\bno\s+(?:[\w.-]+\s+){0,3}(?:api key|credential)\b/i;
-/** Every long-poll adapter gives up with this exact phrase. */
-const RENDER_TIMED_OUT_RE = /\bdid not finish in time\b/i;
+/** Long-poll adapters and local HyperFrames renders use these phrases. */
+const RENDER_TIMED_OUT_RE = /\bdid not finish in time\b|\btimed out after\b/i;
 
 function nextStepForStatus(
   status: number,

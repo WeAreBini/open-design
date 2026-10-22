@@ -5,6 +5,17 @@ set -eu
 export PATH="/opt/hosted-clis/bin:${PATH}"
 export OD_AGENT_HOME="${OD_AGENT_HOME:-/app/.od/agent-home}"
 export DSH_HOME="${DSH_HOME:-${OD_AGENT_HOME}/.dsh}"
+# HyperFrames on Railway/hosted has no Electron desktop renderer.
+export OD_HOSTED="${OD_HOSTED:-1}"
+# Prefer an explicit operator override, then the Chromium shipped in this image.
+if [ -z "${HYPERFRAMES_BROWSER_PATH:-}" ]; then
+  for candidate in /usr/bin/chromium /usr/bin/chromium-browser /usr/bin/google-chrome-stable; do
+    if [ -x "$candidate" ]; then
+      export HYPERFRAMES_BROWSER_PATH="$candidate"
+      break
+    fi
+  done
+fi
 mkdir -p "$OD_AGENT_HOME" "$DSH_HOME" /app/.od
 
 PROFILE="${DSH_HOME}/profiles/open-design"

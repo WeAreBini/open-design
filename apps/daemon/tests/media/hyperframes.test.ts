@@ -210,7 +210,28 @@ describe('hyperframes-html media renderer preflight', () => {
       model: 'hyperframes-html',
       output: 'unavailable.mp4',
       compositionDir: compRel,
-    })).rejects.toThrow(/desktop frame renderer is unavailable/i);
+    })).rejects.toThrow(/desktop frame renderer is unavailable.*no headless Chromium/i);
+  });
+
+  it('uses a Chromium binary already present at a known hosted path without downloading', async () => {
+    const { resolveHyperFramesHeadlessBrowserPath } = await import('../../src/media/hyperframes-runtime.js');
+    const fakeChromium = path.join(root, 'fake-chromium');
+    await writeFile(fakeChromium, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+
+    expect(resolveHyperFramesHeadlessBrowserPath({
+      env: {},
+      candidates: [fakeChromium],
+    })).toBeUndefined();
+
+    expect(resolveHyperFramesHeadlessBrowserPath({
+      env: { OD_HOSTED: '1' },
+      candidates: [fakeChromium, '/usr/bin/does-not-exist'],
+    })).toBe(fakeChromium);
+
+    expect(resolveHyperFramesHeadlessBrowserPath({
+      env: { HYPERFRAMES_BROWSER_PATH: '/explicit/headless' },
+      candidates: [fakeChromium],
+    })).toBe('/explicit/headless');
   });
 
   it('reads composition metrics and injects after the real body boundary', () => {

@@ -97,8 +97,12 @@ COPY plugins/_official ./plugins/_official
 
 FROM ${RUNTIME_IMAGE}
 
+# Chromium is required for HyperFrames (`hyperframes-html`) on daemon-only /
+# hosted installs: there is no Electron desktop frame renderer in this image.
+# fonts-liberation covers Latin captions; do not auto-download Chrome at runtime.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       tini poppler-utils bash git ca-certificates curl \
+      chromium fonts-liberation \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system --gid 1001 open-design \
     && useradd --system --uid 1001 --gid open-design --no-create-home --shell /usr/sbin/nologin open-design
@@ -139,6 +143,9 @@ ENV CODEX_BIN=/opt/hosted-clis/bin/codex
 ENV DSH_BIN=/opt/hosted-clis/bin/dsh
 ENV OD_AGENT_HOME=/app/.od/agent-home
 ENV DSH_HOME=/app/.od/agent-home/.dsh
+# Hosted marker + Chromium pin so HyperFrames video does not require Electron.
+ENV OD_HOSTED=1
+ENV HYPERFRAMES_BROWSER_PATH=/usr/bin/chromium
 
 EXPOSE 7456
 
