@@ -10,6 +10,10 @@ const primitivesCss = readFileSync(
   new URL('../../src/styles/primitives.css', import.meta.url),
   'utf8',
 );
+const mentionHomeCss = readFileSync(
+  new URL('../../src/styles/workspace/mention-home.css', import.meta.url),
+  'utf8',
+);
 const routinesCss = readFileSync(
   new URL('../../src/styles/viewer/routines.css', import.meta.url),
   'utf8',
@@ -37,6 +41,31 @@ function systemDarkBlock(source: string): string {
   return match![1];
 }
 
+/** Relative luminance (sRGB), WCAG 2.x. */
+function relativeLuminance(hex: string): number {
+  const raw = hex.replace('#', '');
+  const n = raw.length === 3 ? raw.split('').map((c) => c + c).join('') : raw;
+  const channels = [0, 2, 4].map((i) => {
+    const v = Number.parseInt(n.slice(i, i + 2), 16) / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * channels[0]! + 0.7152 * channels[1]! + 0.0722 * channels[2]!;
+}
+
+function contrastRatio(fg: string, bg: string): number {
+  const a = relativeLuminance(fg);
+  const b = relativeLuminance(bg);
+  const lighter = Math.max(a, b);
+  const darker = Math.min(a, b);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function tokenHex(block: string, name: string): string {
+  const match = block.match(new RegExp(`${name}:\\s*(#[0-9a-fA-F]{3,8});`));
+  expect(match?.[1], `missing hex for ${name}`).toBeTruthy();
+  return match![1]!.toLowerCase();
+}
+
 describe('complete dark theme — token + surface seams', () => {
   it('remaps select/selected/tick ink in both dark scopes', () => {
     for (const block of [darkThemeBlock(tokensCss), systemDarkBlock(tokensCss)]) {
@@ -45,6 +74,31 @@ describe('complete dark theme — token + surface seams', () => {
       expect(block).toMatch(/--selected-soft:\s*color-mix\(in srgb, #f8f9fa 16%, transparent\);/);
       expect(block).toMatch(/--tick-img:\s*url\("data:image\/svg\+xml;base64,/);
       expect(block).not.toMatch(/--select-ink:\s*#353535;/);
+    }
+  });
+
+  it('keeps a stepped dark surface ladder (ground < panel ≤ elevated)', () => {
+    for (const block of [darkThemeBlock(tokensCss), systemDarkBlock(tokensCss)]) {
+      const bg = tokenHex(block, '--bg');
+      const panel = tokenHex(block, '--bg-panel');
+      const elevated = tokenHex(block, '--bg-elevated');
+      expect(relativeLuminance(panel)).toBeGreaterThan(relativeLuminance(bg));
+      expect(relativeLuminance(elevated)).toBeGreaterThan(relativeLuminance(panel));
+      // Composer / floating cards sit on elevated — must not equal crushed ground.
+      expect(elevated).not.toBe(bg);
+    }
+  });
+
+  it('keeps WCAG-ish body and soft text contrast on dark ground', () => {
+    for (const block of [darkThemeBlock(tokensCss), systemDarkBlock(tokensCss)]) {
+      const bg = tokenHex(block, '--bg');
+      const text = tokenHex(block, '--text');
+      const soft = tokenHex(block, '--text-soft');
+      const faint = tokenHex(block, '--text-faint');
+      expect(contrastRatio(text, bg)).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(soft, bg)).toBeGreaterThanOrEqual(4.5);
+      // Faint is captions; allow AA large-text floor (3:1) but keep well above fail.
+      expect(contrastRatio(faint, bg)).toBeGreaterThanOrEqual(3);
     }
   });
 
@@ -57,12 +111,39 @@ describe('complete dark theme — token + surface seams', () => {
     );
   });
 
+  it('maps dark stream/tool ink through muted text (not #a3a3a3)', () => {
+    expect(chatRootCss).toMatch(
+      /:global\(\[data-theme='dark'\]\)[\s\S]*?--chat-stream-ink:\s*var\(--text-muted\);/,
+    );
+    expect(chatRootCss).toMatch(
+      /:global\(\[data-theme='dark'\]\)[\s\S]*?--chat-tool-ink:\s*var\(--text-muted\);/,
+    );
+  });
+
   it('does not snap primary hover to hardcoded #353535', () => {
     expect(primitivesCss).toMatch(
       /button\.primary:hover:not\(:disabled\) \{[\s\S]*?color-mix\(in srgb, var\(--text-strong\) 88%, var\(--bg\)\)/,
     );
     expect(primitivesCss).not.toMatch(
       /button\.primary:hover:not\(:disabled\) \{[\s\S]*?background:\s*#353535;/,
+    );
+  });
+
+  it('uses elevated + strong ink for dark primary buttons (no white-pill island)', () => {
+    expect(primitivesCss).toMatch(
+      /\[data-theme='dark'\] button\.primary \{[\s\S]*?background:\s*var\(--bg-elevated\);/,
+    );
+    expect(primitivesCss).toMatch(
+      /\[data-theme='dark'\] button\.primary \{[\s\S]*?color:\s*var\(--text-strong\);/,
+    );
+  });
+
+  it('keeps settings active nav on elevated + strong ink', () => {
+    expect(mentionHomeCss).toMatch(
+      /\.settings-page-shell \.settings-nav-item\.active,[\s\S]*?background:\s*var\(--bg-elevated\);/,
+    );
+    expect(mentionHomeCss).toMatch(
+      /\.settings-page-shell \.settings-nav-item\.active,[\s\S]*?color:\s*var\(--text-strong\);/,
     );
   });
 

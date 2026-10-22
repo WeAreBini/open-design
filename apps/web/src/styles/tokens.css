@@ -224,26 +224,33 @@
    OS-level prefers-color-scheme media query (system mode = no data-theme attr). */
 [data-theme="dark"] {
   color-scheme: dark;
-  --bg: #202020;
-  --bg-app: #202020;
-  --bg-panel: #353535;
-  --bg-subtle: #494949;
-  --bg-muted: #5c5c5c;
+  /*
+   * Layered dark surfaces (Material surface-container + craft/color.md):
+   * ground → panel → elevated must step up, not share one gray. Pure #000/#fff
+   * vibrate; #202020 crushed mid-tones once volume CSS inject stopped applying.
+   */
+  --bg: #242424;
+  --bg-app: #242424;
+  --bg-panel: #2f2f2f;
+  /* Tracks / washes sit between panel and elevated so raised thumbs read up. */
+  --bg-subtle: #333333;
+  --bg-muted: #525252;
   --bg-fill-tertiary: rgba(255, 255, 255, 0.06);
   --bg-fill-secondary: rgba(255, 255, 255, 0.10);
   --bg-fill: rgba(255, 255, 255, 0.16);
-  --bg-elevated: #353535;
-  --glass-regular: rgba(53, 53, 53, 0.66);
+  --bg-elevated: #454545;
+  --glass-regular: rgba(47, 47, 47, 0.72);
   --glass-edge-highlight: color-mix(in srgb, #fff 14%, transparent);
-  --border: #5c5c5c;
-  --border-strong: #848484;
+  /* Prefer light edges on dark chrome (craft: rgba white ~8–22%). */
+  --border: #6a6a6a;
+  --border-strong: #9a9a9a;
   --border-selected: #a3a3a3;
-  --border-soft: #494949;
+  --border-soft: #4a4a4a;
 
   --text: #eef0f3;
   --text-strong: #f8f9fa;
   --text-muted: #d0d3d8;
-  /* Soft/faint must stay readable on --bg/#202020 — #5c5c5c/#848484 vanish. */
+  /* Soft/faint must stay ≥~4.5:1 on --bg — legacy #5c5c5c/#848484 vanish. */
   --text-soft: #c2c6cc;
   --text-faint: #a8adb4;
 
@@ -297,21 +304,21 @@
 @media (prefers-color-scheme: dark) {
   html:not([data-theme]) {
     color-scheme: dark;
-    --bg: #202020;
-    --bg-app: #202020;
-    --bg-panel: #353535;
-    --bg-subtle: #494949;
-    --bg-muted: #5c5c5c;
+    --bg: #242424;
+    --bg-app: #242424;
+    --bg-panel: #2f2f2f;
+    --bg-subtle: #333333;
+    --bg-muted: #525252;
     --bg-fill-tertiary: rgba(255, 255, 255, 0.06);
     --bg-fill-secondary: rgba(255, 255, 255, 0.10);
     --bg-fill: rgba(255, 255, 255, 0.16);
-    --bg-elevated: #353535;
-    --glass-regular: rgba(53, 53, 53, 0.66);
+    --bg-elevated: #454545;
+    --glass-regular: rgba(47, 47, 47, 0.72);
     --glass-edge-highlight: color-mix(in srgb, #fff 14%, transparent);
-    --border: #5c5c5c;
-    --border-strong: #848484;
+    --border: #6a6a6a;
+    --border-strong: #9a9a9a;
     --border-selected: #a3a3a3;
-    --border-soft: #494949;
+    --border-soft: #4a4a4a;
 
     --text: #eef0f3;
     --text-strong: #f8f9fa;

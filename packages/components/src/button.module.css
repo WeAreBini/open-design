@@ -75,6 +75,44 @@
   border-color: var(--text);
 }
 
+:global([data-theme='dark']) .primary {
+  background: var(--bg-elevated);
+  border-color: var(--border-strong);
+  color: var(--text-strong);
+}
+
+:global([data-theme='dark']) .primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--bg-elevated) 70%, var(--bg-muted));
+  border-color: var(--border-strong);
+  color: var(--text-strong);
+}
+
+:global([data-theme='dark']) .primary:active:not(:disabled) {
+  background: var(--bg-muted);
+  border-color: var(--border-strong);
+  color: var(--text-strong);
+}
+
+@media (prefers-color-scheme: dark) {
+  :global(html:not([data-theme])) .primary {
+    background: var(--bg-elevated);
+    border-color: var(--border-strong);
+    color: var(--text-strong);
+  }
+
+  :global(html:not([data-theme])) .primary:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--bg-elevated) 70%, var(--bg-muted));
+    border-color: var(--border-strong);
+    color: var(--text-strong);
+  }
+
+  :global(html:not([data-theme])) .primary:active:not(:disabled) {
+    background: var(--bg-muted);
+    border-color: var(--border-strong);
+    color: var(--text-strong);
+  }
+}
+
 .primaryGhost {
   background: var(--bg-subtle);
   border-color: transparent;

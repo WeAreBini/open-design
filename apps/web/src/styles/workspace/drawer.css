@@ -418,8 +418,9 @@
 }
 .subtab-pill button:hover:not(.active) { background: var(--bg-muted); border-color: transparent; color: var(--text); }
 .subtab-pill button.active {
-  background: var(--bg-panel);
-  color: var(--text);
+  /* Elevated thumb on --bg-subtle track (dark ladder: panel < elevated). */
+  background: var(--bg-elevated);
+  color: var(--text-strong);
   box-shadow: var(--shadow-xs);
 }
 /* Icon-only variant: any pill button whose sole child is an SVG icon.
