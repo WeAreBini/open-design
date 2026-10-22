@@ -421,7 +421,8 @@ describe('③ 重连行整行字色 —— 稿子 `.tool`(729fa43ce7:2154)', () 
    * 别名字面(`var(--chat-tool-ink)`),不是 `#a3a3a3` —— 这不是缺陷,是它的边界。
    * 于是这一组拆成两步,两步都红才算这一格没做:
    *   ① 量尺读到:这一行的 `color` 由**哪一枚接缝别名**给;
-   *   ② 读接缝本身:那枚别名在**亮暗两个作用域**里都是稿子那枚字面 `#a3a3a3`。
+   *   ② 读接缝本身:亮色仍是稿子字面 `#a3a3a3`;暗色翻到 `var(--text-muted)`
+   *      (proper dark: #a3a3a3 fails AA on elevated chrome).
    * 只做 ① 会被「改了别名却没定义」骗过去,只做 ② 会被「定义了但没人用」骗过去。
    */
   const SEAM = read('src/components/chat/ChatRoot.module.css').replace(/\/\*[\s\S]*?\*\//g, '');
@@ -439,9 +440,10 @@ describe('③ 重连行整行字色 —— 稿子 `.tool`(729fa43ce7:2154)', () 
     expect(measured['color']).toBe('var(--chat-tool-ink)');
   });
 
-  it('② 那枚别名在亮暗两个作用域里都是稿子的字面 #A3A3A3', () => {
+  it('② 亮色仍是稿子 #A3A3A3;暗色翻到 var(--text-muted)', () => {
     const decls = [...SEAM.matchAll(/--chat-tool-ink:\s*([^;]+);/g)].map((m) => m[1]!.trim());
     expect(decls.length, '接缝里没有两处声明(亮 + 暗各一次)').toBe(2);
-    for (const value of decls) expect(value.toLowerCase()).toBe(TOOL_INK.toLowerCase());
+    expect(decls[0]!.toLowerCase()).toBe(TOOL_INK.toLowerCase());
+    expect(decls[1]).toBe('var(--text-muted)');
   });
 });
