@@ -1467,16 +1467,18 @@
 }
 .settings-page-shell .settings-nav-item.active,
 .settings-page-shell .settings-nav-item.active:hover {
-  background: var(--bg-subtle);
-  color: var(--selected);
+  /* Elevated thumb + strong ink — --selected alone used to stay #353535 in
+     dark until select tokens flip, which made active nav vanish. */
+  background: var(--bg-elevated);
+  color: var(--text-strong);
   border-color: transparent;
 }
 .settings-page-shell .settings-nav-item.active strong {
-  color: var(--selected);
+  color: var(--text-strong);
 }
 .settings-page-shell .settings-nav-item.active svg,
 .settings-page-shell .settings-nav-item.active .od-icon {
-  color: var(--selected);
+  color: var(--text-strong);
   opacity: 1;
 }
 .settings-nav-item.active,
@@ -1705,9 +1707,9 @@
    hover and preserve each state's own fill (white for the active tab). */
 .seg-btn:hover:not(:disabled) { border-color: transparent; }
 .seg-btn:hover:not(:disabled):not(.active) { color: var(--text); background: transparent; }
-.seg-btn.active:hover:not(:disabled) { background: var(--bg-panel); }
+.seg-btn.active:hover:not(:disabled) { background: var(--bg-elevated); }
 .seg-btn.active {
-  background: var(--bg-panel);
+  background: var(--bg-elevated);
   border-color: transparent;
   box-shadow: var(--shadow-xs);
 }
@@ -1725,13 +1727,19 @@
 .seg-btn .seg-title {
   font-size: 12px;
   font-weight: 600;
-  color: var(--text);
+  color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
 }
-.seg-btn.active .seg-title { font-weight: 600; }
+.seg-btn.active .seg-title {
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.seg-btn:hover:not(:disabled):not(.active) .seg-title {
+  color: var(--text);
+}
 .seg-btn .seg-meta { display: none; }
 .seg-btn:disabled { opacity: 0.55; cursor: not-allowed; }
 /* Inline variant: title and meta sit on a single row instead of

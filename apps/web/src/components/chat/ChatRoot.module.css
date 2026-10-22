@@ -11,8 +11,9 @@
  * 覆盖值是产品单独指定的色号,与全局 token 无关,所以这里写字面量;
  * 其余一律映射到全局 token,零漂移。
  *
- * 产品当前强制亮色(appearance.ts: FORCED_APP_THEME = 'light')。
- * 暗色作用域里设计稿没给值的,按「同值」处理,不自行发明。
+ * Appearance is Light / Dark / System again (WeAreBini #17+). Hardcoded
+ * light islands in the dark scope (composer cards, plan ink) are product
+ * bugs — map them through tokens that flip, not draft-era "same value".
  */
 
 .vars,
@@ -37,9 +38,10 @@
   /* 消息轨道的悬浮预览必须完全遮住后面的会话内容,不能再用玻璃材质。
      同一枚也给 composer 外壳和队列卡(K1 #8185);透明面板上的**内容**容器
      (思考窗 / Confirmed / 终端块 / question-form)不读它 —— 它们直接落在面板上
-     (OPEND-3177 / 3178,设计定稿 2026-09-16)。 */
-  --chat-floating-card-bg: #fff;
-  --chat-floating-card-text: #202020;
+     (OPEND-3177 / 3178,设计定稿 2026-09-16)。
+     Token-backed so Dark / System→dark do not leave white composer islands. */
+  --chat-floating-card-bg: var(--bg);
+  --chat-floating-card-text: var(--text-strong);
 
   /* ── 描边 ── */
   --chat-border: var(--border);
@@ -87,15 +89,10 @@
   --chat-pick: #00ff04;
   /* 所有动效统一墨色:上传流光、呼吸点、文字流光、步骤转圈、光标 */
   --chat-anim-ink: #353535;
-  /* Plan 卡「当前这一步」/ 收起药丸的字色。稿子把它单独立成一枚变量,
-     只在 Plan 这一族里用(`729fa43ce7:components.css:2007-2009`):
-       .steps, .pmini { --plan-current-text: #353535; --plan-other-text: #848484 }
-     所以这里也单独立一枚,不复用 `--chat-text-strong`(#202020)——
-     那是正文最深的一档,比它深整整一格,「当前这一步」会重得像标题。
-     另一半 `--plan-other-text: #848484` 和 `--chat-text-soft` 逐字节相同,
-     直接用现成那枚,不再多立一个同值别名。
-     ⚠️ 稿子**没有**给这两枚任何暗色覆盖(整份 `src/` 里只有上面那一处声明),
-     所以按接缝约定亮暗两个作用域同值,不自己发明暗色。 */
+  /* Plan 卡「当前这一步」/ 收起药丸的字色。稿子亮色是 #353535;暗色稿
+     没给覆盖,但字面量在 --bg/#202020 上不可读,所以暗作用域翻到 --text。
+     亮色仍钉 #353535(比 --text-strong 浅一格),不复用 `--chat-text-strong`。
+     另一半 `--plan-other-text: #848484` 和 `--chat-text-soft` 同值,不另立。 */
   --chat-plan-current-text: #353535;
   /* 「设计系统工作区 · 自动创建」那张状态卡的四枚色号。稿子
      `729fa43ce7:components.css:344-364` 全部写的是字面值,没有走任何 token:
@@ -263,8 +260,8 @@
   --chat-bg-fill-secondary: var(--bg-fill-secondary);
   --chat-bg-fill-tertiary: var(--bg-fill-tertiary);
   --chat-confirm-surface: var(--brand-soft);
-  --chat-floating-card-bg: #fff;
-  --chat-floating-card-text: #202020;
+  --chat-floating-card-bg: var(--bg-elevated);
+  --chat-floating-card-text: var(--text-strong);
 
   --chat-border: var(--border);
   --chat-border-strong: var(--border-strong);
@@ -294,20 +291,18 @@
   --chat-pick: #00ff04;
   /* 设计稿按明度镜像补的值,不是产品给的 */
   --chat-anim-ink: #dbdbdb;
-  /* 稿子的 `--plan-current-text: #353535` 没有暗色覆盖,按接缝约定同值。
-     ⚠️ 暗色方案真要落地时这一枚得单独看:#353535 在暗底上几乎不可读,
-     但那是「补一版暗色稿」的活,不是这里凭空发明一个值。 */
-  --chat-plan-current-text: #353535;
+  /* #353535 vanishes on dark chrome — use body text, not title-weight strong. */
+  --chat-plan-current-text: var(--text);
   /* 状态卡这四枚稿子没给暗色覆盖,按接缝约定同值(原委见亮色作用域那段注释)。
      ⚠️ 暗色方案真要落地时这一族得整张卡一起看,而不是在这儿凭空反色。 */
   --chat-status-card-surface: #121212;
   --chat-status-card-ink: #fff;
   --chat-status-card-icon-plate: #353535;
   --chat-status-card-detail-ink: #bdbdbd;
-  /* 设计稿没给暗色值,按接缝约定同值 */
-  --chat-stream-ink: #a3a3a3;
-  /* 同上:稿子的 `.tool` 字面 `#A3A3A3` 没有暗色覆盖,两个作用域同值 */
-  --chat-tool-ink: #a3a3a3;
+  /* Tool / stream captions need ≥4.5:1 on elevated composer chrome.
+     Legacy #a3a3a3 fails AA on raised surfaces; lift to muted ladder. */
+  --chat-stream-ink: var(--text-muted);
+  --chat-tool-ink: var(--text-muted);
   --chat-select-ink: var(--select-ink);
   --chat-upgrade-ink: #00ff08;
   /* 稿子 `.up .h .amt b { color: #f8672f }` —— 余额那串数字的暖橙;

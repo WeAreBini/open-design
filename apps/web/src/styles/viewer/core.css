@@ -22,10 +22,10 @@
   align-items: center;
   padding: 8px 14px;
   border-bottom: 0;
-  /* Solid white bar, no hairline: nothing scrolls under this bar (the body
-     scrolls inside itself), so a glass film served no function. Dark theme
-     swaps to the panel surface below. */
-  background: #ffffff;
+  /* Solid bar, no hairline: nothing scrolls under this bar (the body scrolls
+     inside itself), so a glass film served no function. Token-backed so Dark /
+     System→dark do not leave a white strip over the panel. */
+  background: var(--bg);
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   font-size: 13px;
@@ -39,14 +39,6 @@
      partially restored since — without this, every one of those @container
      rules has no ancestor to match against and is permanently inert. */
   container-type: inline-size;
-}
-[data-theme='dark'] .viewer-toolbar {
-  background: var(--bg-panel);
-}
-@media (prefers-color-scheme: dark) {
-  html:not([data-theme]) .viewer-toolbar {
-    background: var(--bg-panel);
-  }
 }
 .viewer-toolbar-left { display: inline-flex; align-items: center; gap: 8px; }
 .viewer-toolbar-actions { display: inline-flex; gap: 2px; align-items: center; }
