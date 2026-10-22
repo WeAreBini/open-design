@@ -91,6 +91,7 @@ import {
 import {
   resolveHyperFramesBrowserRuntimePath,
   resolveHyperFramesCliPath,
+  resolveHyperFramesHeadlessBrowserPath,
   resolveHyperFramesNodeBin,
 } from './hyperframes-runtime.js';
 import { renderVelaImage, renderVelaVideo } from './vela.js';
@@ -3866,9 +3867,8 @@ async function renderFalVideo(ctx: MediaContext, credentials: ProviderConfig, on
 // Packaged rendering uses the Electron Chromium already shipped with Open
 // Design. Desktop captures deterministic PNG frames through its hidden render
 // window/CDP path; daemon encodes them to MP4 with the bundled FFmpeg binary.
-// An explicitly configured HYPERFRAMES_BROWSER_PATH retains a headless escape
-// hatch for daemon-only development, but packaged clients never download or
-// require a second Chrome installation.
+// Daemon-only / hosted installs use an explicit HYPERFRAMES_BROWSER_PATH or a
+// Chromium binary already present at a known path. Never auto-download Chrome.
 // ---------------------------------------------------------------------------
 
 const HYPERFRAMES_RENDER_TIMEOUT_MS = 5 * 60 * 1000;
@@ -3937,13 +3937,14 @@ async function renderHyperFrames(
 
   const tmpRoot = await mkdtemp(path.join(os.tmpdir(), 'open-design-hf-'));
   const tmpOutput = path.join(tmpRoot, 'render.mp4');
-  const usesHeadlessOverride = Boolean(process.env.HYPERFRAMES_BROWSER_PATH?.trim());
+  const headlessBrowserPath = resolveHyperFramesHeadlessBrowserPath();
+  const usesHeadlessOverride = Boolean(headlessBrowserPath);
   const usesDesktopRenderer = !usesHeadlessOverride && desktopFrameRenderer != null;
   try {
-    if (usesHeadlessOverride) {
-      // Explicit daemon-only override. Never auto-discover or auto-download a
-      // browser here: the packaged product path is the bundled Electron engine.
-      await runHyperFramesRender(compAbs, tmpOutput, onProgress);
+    if (usesHeadlessOverride && headlessBrowserPath) {
+      // Daemon-only / hosted path. Never auto-download a browser: either the
+      // operator set HYPERFRAMES_BROWSER_PATH or the image already ships Chromium.
+      await runHyperFramesRender(compAbs, tmpOutput, onProgress, headlessBrowserPath);
     } else if (desktopFrameRenderer) {
       await renderHyperFramesWithDesktop(
         compAbs,
@@ -3954,7 +3955,10 @@ async function renderHyperFrames(
       );
     } else {
       throw new Error(
-        'Open Design desktop frame renderer is unavailable. Open or upgrade the desktop client and try again.',
+        'Open Design desktop frame renderer is unavailable and no headless Chromium ' +
+          'was configured. Open or upgrade the desktop client, or set ' +
+          'HYPERFRAMES_BROWSER_PATH to a Chromium binary (hosted images ship ' +
+          'Chromium at /usr/bin/chromium).',
       );
     }
     const bytes = await readFile(tmpOutput);
@@ -4188,9 +4192,16 @@ async function assertHyperFramesCompositionFile(
  * agent's chat tool shows a long quiet spinner — users can't tell
  * whether anything is happening.
  */
-function runHyperFramesRender(compAbs: string, tmpOutput: string, onProgress?: ProgressFn): Promise<void> {
+function runHyperFramesRender(
+  compAbs: string,
+  tmpOutput: string,
+  onProgress?: ProgressFn,
+  headlessBrowserPath?: string,
+): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     const hyperFramesCli = resolveHyperFramesCliPath();
+    const browserPath = headlessBrowserPath?.trim()
+      || resolveHyperFramesHeadlessBrowserPath();
     const child = spawn(
       resolveHyperFramesNodeBin(),
       [
@@ -4209,6 +4220,7 @@ function runHyperFramesRender(compAbs: string, tmpOutput: string, onProgress?: P
         env: {
           ...process.env,
           OD_HYPERFRAMES_BIN: hyperFramesCli,
+          ...(browserPath ? { HYPERFRAMES_BROWSER_PATH: browserPath } : {}),
         },
         stdio: ['ignore', 'pipe', 'pipe'],
       },
