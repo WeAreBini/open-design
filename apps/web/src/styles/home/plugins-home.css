@@ -1,4 +1,8 @@
-/* Restored plugins-home (split for MCP size); equivalent to main. */
+/* ============================================================
+   Plugins home section — gallery layout — .plugins-home restored from main.
+   Split across plugins-home-p*.css for transport; concatenated
+   content matches origin/main plugins-home.css.
+   ============================================================ */
 @import './plugins-home-p0.css';
 @import './plugins-home-p1.css';
 @import './plugins-home-p2.css';
