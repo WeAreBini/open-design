@@ -240,11 +240,12 @@
   --border-selected: #a3a3a3;
   --border-soft: #494949;
 
-  --text: #ededed;
-  --text-strong: #fafafa;
-  --text-muted: #bdbdbd;
-  --text-soft: #848484;
-  --text-faint: #5c5c5c;
+  --text: #eef0f3;
+  --text-strong: #f8f9fa;
+  --text-muted: #d0d3d8;
+  /* Soft/faint must stay readable on --bg/#202020 — #5c5c5c/#848484 vanish. */
+  --text-soft: #c2c6cc;
+  --text-faint: #a8adb4;
 
   --accent: #ededed;
   --accent-contrast: #202020;
@@ -303,11 +304,11 @@
     --border-selected: #a3a3a3;
     --border-soft: #494949;
 
-    --text: #ededed;
-    --text-strong: #fafafa;
-    --text-muted: #bdbdbd;
-    --text-soft: #848484;
-    --text-faint: #5c5c5c;
+    --text: #eef0f3;
+    --text-strong: #f8f9fa;
+    --text-muted: #d0d3d8;
+    --text-soft: #c2c6cc;
+    --text-faint: #a8adb4;
 
     --accent: #ededed;
     --accent-contrast: #202020;
