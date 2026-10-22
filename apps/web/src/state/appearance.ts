@@ -9,6 +9,10 @@ const ACCENT_VARS = [
   '--accent-hover',
 ] as const;
 
+/** Near-panel neutrals that disappear on dark surfaces — remap to brand green. */
+const DARK_INVISIBLE_ACCENTS = new Set(['#353535', '#202020', '#848484']);
+const DARK_SAFE_ACCENT = '#87ea5c';
+
 export const DEFAULT_ACCENT_COLOR = '#353535';
 export const ACCENT_SWATCHES = [
   DEFAULT_ACCENT_COLOR,
@@ -32,6 +36,36 @@ export function resolveAccentColor(value: unknown): string {
   return normalizeAccentColor(value) ?? DEFAULT_ACCENT_COLOR;
 }
 
+/**
+ * Accept light / dark / system; anything else falls back to light.
+ */
+export function resolveAppTheme(persisted?: AppTheme | null): AppTheme {
+  if (persisted === 'light' || persisted === 'dark' || persisted === 'system') {
+    return persisted;
+  }
+  return 'light';
+}
+
+export function prefersDarkColorScheme(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    return false;
+  }
+  return window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+
+/** Whether the resolved appearance paints dark surfaces right now. */
+export function isDarkAppearance(theme: AppTheme | null | undefined): boolean {
+  const resolved = resolveAppTheme(theme);
+  if (resolved === 'dark') return true;
+  if (resolved === 'light') return false;
+  return prefersDarkColorScheme();
+}
+
+function accentForTheme(accentColor: string, dark: boolean): string {
+  if (dark && DARK_INVISIBLE_ACCENTS.has(accentColor)) return DARK_SAFE_ACCENT;
+  return accentColor;
+}
+
 function accentVars(accentColor: string): Record<(typeof ACCENT_VARS)[number], string> {
   return {
     '--accent': accentColor,
@@ -43,48 +77,36 @@ function accentVars(accentColor: string): Record<(typeof ACCENT_VARS)[number], s
   };
 }
 
-/**
- * The one appearance OpenDesign ships.
- *
- * Product removed the theme setting: the workspace surfaces have no dark
- * tokens, so a dark app is a broken app. `data-theme` is therefore a constant
- * rather than a preference — and it must always be PRESENT, not merely
- * non-dark. Every dark rule in the app is gated on the attribute being absent
- * (`html:not([data-theme])` in CSS) or falls back to `prefers-color-scheme`
- * when the attribute is missing (`shiki`, `ConnectorLogo`, `SketchEditor`,
- * `TerminalViewer`, `connectorBrandColor`, `MentionNode`). Stamping it
- * unconditionally is what keeps a dark OS from leaking through.
- */
-export const FORCED_APP_THEME = 'light' as const;
-
-/**
- * Coerce any persisted theme to the only one that still exists.
- *
- * Changing the default alone cannot fix an existing install: every user who
- * ever opened the old picker has `'dark'` — or `'system'`, which resolves dark
- * on a dark OS — written to localStorage, and a stored value does not move
- * when the default does. Config reads funnel through here so those installs
- * come back light.
- */
-export function resolveAppTheme(persisted?: AppTheme | null): AppTheme {
-  return persisted === FORCED_APP_THEME ? persisted : FORCED_APP_THEME;
-}
-
 export function applyAppearanceToDocument({
+  theme,
   accentColor,
 }: {
+  theme?: AppTheme;
   accentColor?: string;
 }): void {
   const root = document.documentElement;
-  root.setAttribute('data-theme', FORCED_APP_THEME);
+  const resolved = resolveAppTheme(theme);
+  if (resolved === 'light' || resolved === 'dark') {
+    root.setAttribute('data-theme', resolved);
+  } else {
+    // System mode: omit the attribute so CSS `prefers-color-scheme` applies.
+    root.removeAttribute('data-theme');
+  }
+
+  const dark = isDarkAppearance(resolved);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', dark ? '#2a2a2a' : '#f7f7f7');
+
   // Desktop shell: keep the native window appearance (the macOS vibrancy
   // glass material) in step with the app theme. Without this the glass
-  // follows the OS appearance, so the light app over a dark OS sat on dark
-  // glass and read as a muddy gray (#94). Feature-detected — browsers and
-  // older host builds have no appearance capability.
-  getOpenDesignHost()?.appearance?.setTheme(FORCED_APP_THEME);
+  // follows the OS appearance, so an explicitly light app over a dark OS sat
+  // on dark glass and read as a muddy gray (#94). Feature-detected — browsers
+  // and older host builds have no appearance capability.
+  getOpenDesignHost()?.appearance?.setTheme(
+    resolved === 'light' || resolved === 'dark' ? resolved : 'system',
+  );
 
-  const normalized = resolveAccentColor(accentColor);
+  const normalized = accentForTheme(resolveAccentColor(accentColor), dark);
   const vars = accentVars(normalized);
   for (const name of ACCENT_VARS) {
     root.style.setProperty(name, vars[name]);

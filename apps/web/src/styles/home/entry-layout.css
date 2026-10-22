@@ -1821,6 +1821,19 @@
     --entry-content-ring: color-mix(in srgb, var(--border) 66%, transparent);
   }
 }
+/* Dark theme: milky rgba(255,255,255,0.85) reads as a cream sheet on dark chrome. */
+[data-theme='dark'] .entry-main--scroll {
+  --entry-content-surface: #2f2f2f;
+  --entry-content-ring: color-mix(in srgb, var(--border) 70%, transparent);
+  background: var(--entry-content-surface);
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) .entry-main--scroll {
+    --entry-content-surface: #2f2f2f;
+    --entry-content-ring: color-mix(in srgb, var(--border) 70%, transparent);
+    background: var(--entry-content-surface);
+  }
+}
 .entry-main__inner {
   width: 100%;
   /* The cap is on the CONTENT column, so it carries the gutters with it:

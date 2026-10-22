@@ -118,6 +118,7 @@ import type {
   ApiProtocol,
   ApiProtocolConfig,
   AppConfig,
+  AppTheme,
   AppVersionInfo,
   ConnectionTestResponse,
   DesignSystemGenerationJob,
@@ -1547,8 +1548,8 @@ export function SettingsDialog({
     ReadonlySet<string>
   >(() => new Set());
   const previousInitialRef = useRef(initial);
-  // Accent only — the theme is a constant now that the app ships light-only.
   const lastSavedAppearanceRef = useRef({
+    theme: (initial.theme ?? 'light') as AppTheme,
     accentColor: resolveAccentColor(initial.accentColor),
   });
 
@@ -1564,9 +1565,10 @@ export function SettingsDialog({
 
   useEffect(() => {
     lastSavedAppearanceRef.current = {
+      theme: (initial.theme ?? 'light') as AppTheme,
       accentColor: resolveAccentColor(initial.accentColor),
     };
-  }, [initial.accentColor]);
+  }, [initial.theme, initial.accentColor]);
 
   useEffect(() => {
     const previousInitial = previousInitialRef.current;
@@ -3348,6 +3350,7 @@ export function SettingsDialog({
             committedClearedByokProviderKeyRef.current = null;
           }
           lastSavedAppearanceRef.current = {
+            theme: (persistedSnapshot.theme ?? 'light') as AppTheme,
             accentColor: resolveAccentColor(persistedSnapshot.accentColor),
           };
           // If a newer edit landed while the request was in flight,
@@ -3905,7 +3908,7 @@ export function SettingsDialog({
     integrations: { title: t('settings.mcpServerTitle'), subtitle: t('settings.mcpServerHint') },
     mcpClient: { title: t('settings.externalMcpTitle'), subtitle: t('settings.externalMcpHint') },
     language: { title: t('settings.language'), subtitle: t('settings.languageHint') },
-    // The theme setting is gone (the app ships light-only), so `appearance` has
+    // `appearance` deep-links into General (theme lives there). `appearance` has
     // no copy of its own. It survives only as a legacy deep-link token that
     // `normalizeSettingsSection` folds into General, so this entry can never be
     // the active header — it exists to keep the Record exhaustive.
@@ -5944,6 +5947,14 @@ export function SettingsDialog({
               there is no longer a standalone render block for any of them. */}
           {activeSection === 'general' ? (
             <section className="settings-section settings-general-section">
+              <div className="settings-general-block settings-general-block--appearance">
+                <div className="settings-general-block-head">
+                  <h3>{t('settings.appearance')}</h3>
+                  <p className="hint">{t('settings.appearanceHint')}</p>
+                </div>
+                <AppearanceSection cfg={cfg} setCfg={setCfg} />
+              </div>
+
               <div className="settings-general-block">
                 <div className="settings-general-field">
                   <span className="settings-general-label">{t('settings.language')}</span>
@@ -9254,4 +9265,58 @@ function testNotificationStatusText(
   if (result === 'permission-denied') return 'settings.notifyDesktopBlocked';
   if (result === 'unsupported') return 'settings.notifyDesktopUnsupported';
   return 'settings.notifyTestFailed';
+}
+
+const THEMES: Array<{
+  value: AppTheme;
+  labelKey: 'settings.themeSystem' | 'settings.themeLight' | 'settings.themeDark';
+  icon?: 'sun' | 'moon';
+}> = [
+  { value: 'system', labelKey: 'settings.themeSystem' },
+  { value: 'light', labelKey: 'settings.themeLight', icon: 'sun' },
+  { value: 'dark', labelKey: 'settings.themeDark', icon: 'moon' },
+];
+
+function AppearanceSection({
+  cfg,
+  setCfg,
+}: {
+  cfg: AppConfig;
+  setCfg: Dispatch<SetStateAction<AppConfig>>;
+}) {
+  const { t } = useI18n();
+  const current = cfg.theme ?? 'light';
+  const currentAccent = resolveAccentColor(cfg.accentColor);
+
+  // Live preview before autosave; SettingsDialog cleanup reverts on cancel.
+  useLayoutEffect(() => {
+    applyAppearanceToDocument({
+      theme: current,
+      accentColor: currentAccent,
+    });
+  }, [current, currentAccent]);
+
+  return (
+    <div
+      className="seg-control"
+      role="group"
+      aria-label={t('settings.appearance')}
+      style={{ '--seg-cols': THEMES.length } as CSSProperties}
+    >
+      {THEMES.map(({ value, labelKey, icon }) => (
+        <button
+          key={value}
+          type="button"
+          className={'seg-btn' + (current === value ? ' active' : '')}
+          aria-pressed={current === value}
+          onClick={() => {
+            setCfg((c) => ({ ...c, theme: value }));
+          }}
+        >
+          {icon ? <Icon name={icon} size={14} aria-hidden="true" /> : null}
+          <span className="seg-title">{t(labelKey)}</span>
+        </button>
+      ))}
+    </div>
+  );
 }
