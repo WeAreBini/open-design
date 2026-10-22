@@ -1,0 +1,29 @@
+/* Dark overrides for plugins home Use menus / primary CTAs (hardcoded light chrome). */
+[data-theme='dark'] .plugins-home__use-menu-list {
+  background: var(--bg-elevated, #353535);
+  color: var(--text-strong, #fafafa);
+  border-color: var(--border, #5c5c5c);
+  box-shadow: var(--shadow-md);
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) .plugins-home__use-menu-list {
+    background: var(--bg-elevated, #353535);
+    color: var(--text-strong, #fafafa);
+    border-color: var(--border, #5c5c5c);
+  }
+}
+[data-theme='dark'] button.plugins-home__use-menu-item:hover:not(:disabled),
+[data-theme='dark'] button.plugins-home__use-menu-item:focus-visible {
+  background: var(--bg-muted, #5c5c5c);
+  color: var(--text-strong, #fafafa);
+}
+[data-theme='dark'] .plugins-home__action--primary {
+  background: var(--bg-elevated, #353535);
+  color: var(--brand-text, #adf788);
+  border-color: var(--border-strong, #848484);
+}
+[data-theme='dark'] .plugins-home__action--primary:hover:not(:disabled) {
+  background: var(--bg-muted, #5c5c5c);
+  border-color: var(--border-strong, #848484);
+  color: var(--brand-text, #adf788);
+}
