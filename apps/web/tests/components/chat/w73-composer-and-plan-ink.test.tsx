@@ -24,8 +24,8 @@
  *        .pmini .pill     { color: var(--plan-current-text) }   → **#353535**
  *      产品两处都写的 `--chat-text-strong`(#202020),深了一档。
  *      非当前步那一档 `#848484` 和产品的 `--chat-text-soft` 逐字节相同,不动。
- *      稿子**没有**给这两枚变量任何暗色覆盖(整份 src 里只有这一处声明),
- *      所以接缝的亮暗两个作用域按约定同值。
+ *      稿子没给暗色覆盖;完整暗主题落地后亮色仍钉 #353535,暗色翻到
+ *      `var(--text)`(否则 #353535 在 --bg/#202020 上不可读)。
  *
  * ── 量法与它的边界(先读这段) ─────────────────────────────────────────
  * jsdom 不做层叠、不解 `var()`,`getComputedStyle` 在这里恒为空串。
@@ -469,12 +469,13 @@ describe('② 当前这一步 / 收起药丸的墨色 —— 稿子 `--plan-curr
     );
   });
 
-  it('② 那枚别名在亮暗两个作用域里都是稿子的字面 #353535', () => {
+  it('② 亮色仍是稿子的 #353535;暗色翻到 var(--text) 以免消失', () => {
     const decls = [...SEAM.matchAll(new RegExp(`${PLAN_CURRENT_ALIAS}:\\s*([^;]+);`, 'g'))].map(
       (m) => m[1]!.trim().toLowerCase(),
     );
     expect(decls.length, '接缝里没有两处声明(亮 + 暗各一次)').toBe(2);
-    for (const value of decls) expect(value).toBe(DRAFT.planCurrent);
+    expect(decls[0]).toBe(DRAFT.planCurrent);
+    expect(decls[1]).toBe('var(--text)');
   });
 
   it('反向对照:非当前的那几步一格没动,仍是 --chat-text-soft,且它就是稿子的 #848484', () => {

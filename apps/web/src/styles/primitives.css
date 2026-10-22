@@ -46,8 +46,10 @@ button.primary {
   color: var(--bg);
 }
 button.primary:hover:not(:disabled) {
-  background: #353535;
-  border-color: #353535;
+  /* Mix toward the page ground so light darkens a notch and dark does not
+     snap to near-black (#353535) over a near-white primary fill. */
+  background: color-mix(in srgb, var(--text-strong) 88%, var(--bg));
+  border-color: color-mix(in srgb, var(--text-strong) 88%, var(--bg));
 }
 button.primary:active:not(:disabled) {
   background: var(--text);

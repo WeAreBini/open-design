@@ -365,7 +365,7 @@
   width: 100%;
   height: 100%;
   border: none;
-  background: white;
+  background: var(--bg);
 }
 /* Momentary "Press Esc to exit" confirmation, centered near the top of the
    presented stage. Timed to unmount at ~3.6s from the host, so the keyframe
@@ -412,12 +412,13 @@
   align-items: center;
   padding: 6px 12px;
   font-size: 12px;
-  background: rgba(255, 255, 255, 0.92);
+  background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   cursor: pointer;
+  color: var(--text-strong);
 }
-.present-exit:hover { background: white; }
+.present-exit:hover { background: var(--bg-elevated); }
 
 /* Picker (legacy in some surfaces) */
 .picker {
@@ -469,7 +470,7 @@
 .preview-actions button { padding: 4px 10px; font-size: 12px; }
 .preview-body { flex: 1; min-height: 0; position: relative; }
 .preview-body iframe {
-  width: 100%; height: 100%; border: none; background: white;
+  width: 100%; height: 100%; border: none; background: var(--bg);
 }
 .preview-empty {
   display: flex; align-items: center; justify-content: center;
@@ -3214,7 +3215,7 @@ legend.qf-color-legend {
 .ds-modal-stage {
   flex: 1;
   min-height: 0;
-  background: white;
+  background: var(--bg);
   position: relative;
   display: flex;
   align-items: stretch;
@@ -3224,14 +3225,14 @@ legend.qf-color-legend {
   min-width: 0;
   position: relative;
   overflow: hidden;
-  background: white;
+  background: var(--bg);
 }
 .ds-modal-stage-iframe-scaler {
   position: absolute;
   top: 0;
   left: 0;
   transform-origin: top left;
-  background: white;
+  background: var(--bg);
   /* Prevent the GPU layer from blurring the scaled iframe on Retina. */
   will-change: transform;
 }
@@ -3240,7 +3241,7 @@ legend.qf-color-legend {
   height: 100%;
   border: none;
   display: block;
-  background: white;
+  background: var(--bg);
 }
 .ds-modal-stage.has-sidebar .ds-modal-stage-iframe {
   flex: 1 1 60%;
@@ -3418,7 +3419,7 @@ legend.qf-color-legend {
   object-fit: contain;
   border-radius: var(--radius);
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.16);
-  background: white;
+  background: var(--bg);
 }
 .plugin-media-stage__video {
   width: auto;
@@ -3737,7 +3738,7 @@ legend.qf-color-legend {
 .design-spec-line.is-h4 { color: #16a34a; font-weight: 600; }
 .design-spec-line.is-quote { color: #6b7280; font-style: italic; }
 .design-spec-line.is-list { color: var(--text); }
-.design-spec-line.is-table { color: #353535; }
+.design-spec-line.is-table { color: var(--text); }
 .design-spec-line.is-fence { color: #dc2626; }
 .design-spec-line.is-blank { color: var(--text-muted); }
 .md-tk-bold { font-weight: 700; color: var(--text); }
