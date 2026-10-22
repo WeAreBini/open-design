@@ -1,0 +1,295 @@
+.plugins-home__design::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 60%, rgba(0, 0, 0, 0.18));
+  pointer-events: none;
+}
+.plugins-home__design--showcase::before {
+  z-index: 1;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0) 52%, rgba(0, 0, 0, 0.18) 100%),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0));
+}
+.plugins-home__design-showcase {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: var(--bg-panel);
+}
+.plugins-home__design-iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1280px;
+  height: 960px;
+  border: 0;
+  transform: scale(0.24);
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+.plugins-home__design-headline {
+  position: relative;
+  font-size: 18px;
+  line-height: 1.18;
+  font-weight: 600;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+  z-index: 1;
+}
+.plugins-home__design-headline strong {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.plugins-home__design-specimen {
+  position: relative;
+  display: flex;
+  gap: 10px;
+  font-size: 28px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.86);
+  z-index: 1;
+}
+.plugins-home__design-swatches {
+  position: relative;
+  display: flex;
+  gap: 4px;
+  z-index: 1;
+}
+.plugins-home__design-swatches span {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+/* Text fallback */
+.plugins-home__text-surface {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--accent-tint) 0%, var(--bg-subtle) 100%);
+}
+.plugins-home__text-glyph {
+  font-family: var(--serif);
+  font-size: 52px;
+  font-weight: 600;
+  color: var(--accent);
+  letter-spacing: -0.02em;
+}
+
+/* ---------- Hover overlay (mask) ----------
+   The overlay floats over the preview surface on hover/focus,
+   surfacing description, tags, and primary actions without
+   stealing the resting state. Mirrors the lightbox-style
+   reveal Lovart and similar galleries use.
+   --------------------------------------------------------- */
+.plugins-home__card-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 12px;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.0) 0%, rgba(0, 0, 0, 0.42) 55%, rgba(0, 0, 0, 0.78) 100%);
+  color: white;
+  opacity: 0;
+  transition: opacity 180ms var(--ease-out);
+  pointer-events: none;
+  z-index: 3;
+}
+.plugins-home__card:hover .plugins-home__card-overlay,
+.plugins-home__card:focus-within .plugins-home__card-overlay,
+.plugins-home__card--shareable .plugins-home__card-overlay {
+  opacity: 1;
+  pointer-events: auto;
+}
+.plugins-home__card-overlay-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.plugins-home__overlay-featured {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+  color: white;
+  -webkit-backdrop-filter: blur(var(--material-thin-blur));
+  backdrop-filter: blur(var(--material-thin-blur));
+}
+.plugins-home__card-overlay-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: auto;
+}
+.plugins-home__overlay-title {
+  font-weight: 600;
+  font-size: 14px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plugins-home__overlay-desc {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.88);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.32);
+}
+.plugins-home__overlay-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.plugins-home__overlay-tag {
+  font-size: 12px;
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.18);
+  color: white;
+  -webkit-backdrop-filter: blur(var(--material-thin-blur));
+  backdrop-filter: blur(var(--material-thin-blur));
+}
+.plugins-home__overlay-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+.plugins-home__overlay-actions-main,
+.plugins-home__share-actions {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+.plugins-home__share-actions {
+  width: 100%;
+}
+
+/* ---------- Resting metadata foot ----------
+   Always visible at the bottom of the card, showing title +
+   trust pill. The overlay's matching info supersedes this on
+   hover — keeping the foot small means cards still answer
+   "what is this?" before any pointer motion.
+   --------------------------------------------------------- */
+.plugins-home__card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px 10px;
+  border-top: 1px solid var(--border-soft);
+  background: var(--bg-panel);
+}
+.plugins-home__card-save {
+  position: relative;
+  z-index: 4;
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background-color 120ms var(--ease-out), border-color 120ms var(--ease-out),
+    color 120ms var(--ease-out);
+}
+.plugins-home__card-save:hover,
+.plugins-home__card-save:focus-visible {
+  background: var(--accent-tint);
+  border-color: color-mix(in srgb, var(--accent) 26%, transparent);
+  color: var(--accent);
+  outline: none;
+}
+.plugins-home__card-save.is-saved {
+  background: color-mix(in srgb, var(--accent) 16%, white);
+  border-color: color-mix(in srgb, var(--accent) 32%, transparent);
+  color: var(--accent);
+}
+.plugins-home__card-title {
+  display: inline-flex;
+  align-items: center;
+  flex: 1 1 auto;
+  font-weight: 600;
+  color: var(--text-strong);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.plugins-home__card-title-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 私有/共享 capsule + hover-revealed toggle in the card foot. Mirrors the
+   project-card角标: 小圆角胶囊, 共享=蓝(accent), 私有=灰. */
+.plugins-home__visibility {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 auto;
+  height: 18px;
+  padding: 0 7px 0 6px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+  color: var(--text-faint);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+.plugins-home__visibility--shared {
+  border-color: color-mix(in srgb, var(--accent) 34%, transparent);
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+.plugins-home__visibility--private {
+  border-color: var(--border);
+  background: var(--bg-subtle);
+  color: var(--text-faint);
+}
+
+/* Compact inline toggle, revealed on card hover so the resting foot stays clean. */
+.plugins-home__visibility-toggle {
+  appearance: none;
+  display: none;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 120ms var(--ease-out), color 120ms var(--ease-out),
+    background-color 120ms var(--ease-out);
+}
