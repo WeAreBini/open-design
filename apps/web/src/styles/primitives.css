@@ -40,57 +40,18 @@ button {
 button:focus-visible { outline: var(--stroke-thin, 1px) solid var(--blue); outline-offset: 2px; }
 
 button.primary {
-  background: var(--text-strong);
-  border-color: var(--text-strong);
+  background: var(--button-primary-bg);
+  border-color: var(--button-primary-border);
   border-radius: var(--radius-pill);
-  color: var(--bg);
+  color: var(--button-primary-ink);
 }
 button.primary:hover:not(:disabled) {
-  /* Mix toward the page ground so light darkens a notch and dark does not
-     snap to near-black (#353535) over a near-white primary fill. */
-  background: color-mix(in srgb, var(--text-strong) 88%, var(--bg));
-  border-color: color-mix(in srgb, var(--text-strong) 88%, var(--bg));
+  background: var(--button-primary-hover-bg);
+  border-color: var(--button-primary-hover-bg);
 }
 button.primary:active:not(:disabled) {
-  background: var(--text);
-  border-color: var(--text);
-}
-/*
- * Dark primary: elevated surface + strong ink (not inverted near-white).
- * Inverted light fills read as white islands next to chat composer chrome and
- * match the volume CTA pass that live lost when apply-bini-product.mjs skipped.
- */
-[data-theme='dark'] button.primary {
-  background: var(--bg-elevated);
-  border-color: var(--border-strong);
-  color: var(--text-strong);
-}
-[data-theme='dark'] button.primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--bg-elevated) 70%, var(--bg-muted));
-  border-color: var(--border-strong);
-  color: var(--text-strong);
-}
-[data-theme='dark'] button.primary:active:not(:disabled) {
-  background: var(--bg-muted);
-  border-color: var(--border-strong);
-  color: var(--text-strong);
-}
-@media (prefers-color-scheme: dark) {
-  html:not([data-theme]) button.primary {
-    background: var(--bg-elevated);
-    border-color: var(--border-strong);
-    color: var(--text-strong);
-  }
-  html:not([data-theme]) button.primary:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--bg-elevated) 70%, var(--bg-muted));
-    border-color: var(--border-strong);
-    color: var(--text-strong);
-  }
-  html:not([data-theme]) button.primary:active:not(:disabled) {
-    background: var(--bg-muted);
-    border-color: var(--border-strong);
-    color: var(--text-strong);
-  }
+  background: var(--button-primary-active-bg);
+  border-color: var(--button-primary-active-bg);
 }
 button.primary-ghost {
   background: var(--bg-subtle);

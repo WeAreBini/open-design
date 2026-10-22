@@ -29,16 +29,18 @@ const pluginsHomeCss = readFileSync(
 
 function darkThemeBlock(source: string): string {
   const match = source.match(/\[data-theme="dark"\]\s*\{([\s\S]*?)\n\}/);
-  expect(match?.[1]).toBeTruthy();
-  return match![1];
+  const block = match?.[1];
+  expect(block).toBeTruthy();
+  return block as string;
 }
 
 function systemDarkBlock(source: string): string {
   const match = source.match(
     /@media \(prefers-color-scheme: dark\) \{\s*html:not\(\[data-theme\]\) \{([\s\S]*?)\n {2}\}/,
   );
-  expect(match?.[1]).toBeTruthy();
-  return match![1];
+  const block = match?.[1];
+  expect(block).toBeTruthy();
+  return block as string;
 }
 
 /** Relative luminance (sRGB), WCAG 2.x. */
@@ -62,8 +64,9 @@ function contrastRatio(fg: string, bg: string): number {
 
 function tokenHex(block: string, name: string): string {
   const match = block.match(new RegExp(`${name}:\\s*(#[0-9a-fA-F]{3,8});`));
-  expect(match?.[1], `missing hex for ${name}`).toBeTruthy();
-  return match![1]!.toLowerCase();
+  const hex = match?.[1];
+  expect(hex, `missing hex for ${name}`).toBeTruthy();
+  return (hex as string).toLowerCase();
 }
 
 describe('complete dark theme — token + surface seams', () => {
@@ -120,22 +123,24 @@ describe('complete dark theme — token + surface seams', () => {
     );
   });
 
-  it('does not snap primary hover to hardcoded #353535', () => {
+  it('routes primary buttons through theme tokens (no hardcoded #353535 hover)', () => {
     expect(primitivesCss).toMatch(
-      /button\.primary:hover:not\(:disabled\) \{[\s\S]*?color-mix\(in srgb, var\(--text-strong\) 88%, var\(--bg\)\)/,
+      /button\.primary \{[\s\S]*?background:\s*var\(--button-primary-bg\);/,
+    );
+    expect(primitivesCss).toMatch(
+      /button\.primary:hover:not\(:disabled\) \{[\s\S]*?background:\s*var\(--button-primary-hover-bg\);/,
     );
     expect(primitivesCss).not.toMatch(
       /button\.primary:hover:not\(:disabled\) \{[\s\S]*?background:\s*#353535;/,
     );
   });
 
-  it('uses elevated + strong ink for dark primary buttons (no white-pill island)', () => {
-    expect(primitivesCss).toMatch(
-      /\[data-theme='dark'\] button\.primary \{[\s\S]*?background:\s*var\(--bg-elevated\);/,
-    );
-    expect(primitivesCss).toMatch(
-      /\[data-theme='dark'\] button\.primary \{[\s\S]*?color:\s*var\(--text-strong\);/,
-    );
+  it('flips primary CTA tokens to elevated + strong ink in dark scopes', () => {
+    for (const block of [darkThemeBlock(tokensCss), systemDarkBlock(tokensCss)]) {
+      expect(block).toMatch(/--button-primary-bg:\s*var\(--bg-elevated\);/);
+      expect(block).toMatch(/--button-primary-ink:\s*var\(--text-strong\);/);
+      expect(block).not.toMatch(/--button-primary-bg:\s*var\(--text-strong\);/);
+    }
   });
 
   it('keeps settings active nav on elevated + strong ink', () => {

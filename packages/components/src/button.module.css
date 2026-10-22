@@ -59,58 +59,20 @@
 }
 
 .primary {
-  background: var(--text-strong);
-  border-color: var(--text-strong);
+  background: var(--button-primary-bg);
+  border-color: var(--button-primary-border);
   border-radius: var(--radius-pill);
-  color: var(--bg);
+  color: var(--button-primary-ink);
 }
 
 .primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--text-strong) 88%, var(--bg));
-  border-color: color-mix(in srgb, var(--text-strong) 88%, var(--bg));
+  background: var(--button-primary-hover-bg);
+  border-color: var(--button-primary-hover-bg);
 }
 
 .primary:active:not(:disabled) {
-  background: var(--text);
-  border-color: var(--text);
-}
-
-:global([data-theme='dark']) .primary {
-  background: var(--bg-elevated);
-  border-color: var(--border-strong);
-  color: var(--text-strong);
-}
-
-:global([data-theme='dark']) .primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--bg-elevated) 70%, var(--bg-muted));
-  border-color: var(--border-strong);
-  color: var(--text-strong);
-}
-
-:global([data-theme='dark']) .primary:active:not(:disabled) {
-  background: var(--bg-muted);
-  border-color: var(--border-strong);
-  color: var(--text-strong);
-}
-
-@media (prefers-color-scheme: dark) {
-  :global(html:not([data-theme])) .primary {
-    background: var(--bg-elevated);
-    border-color: var(--border-strong);
-    color: var(--text-strong);
-  }
-
-  :global(html:not([data-theme])) .primary:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--bg-elevated) 70%, var(--bg-muted));
-    border-color: var(--border-strong);
-    color: var(--text-strong);
-  }
-
-  :global(html:not([data-theme])) .primary:active:not(:disabled) {
-    background: var(--bg-muted);
-    border-color: var(--border-strong);
-    color: var(--text-strong);
-  }
+  background: var(--button-primary-active-bg);
+  border-color: var(--button-primary-active-bg);
 }
 
 .primaryGhost {
