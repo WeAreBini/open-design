@@ -42,4 +42,27 @@ if [ -d "$plugin_modules" ] && [ -d "$toolchain_modules" ] && [ ! -e "${toolchai
   ln -s "$plugin_modules" "${toolchain_modules}/@open-design"
 fi
 
+# Volume apply (Railway start command) may copy an older od-bini.js after this
+# entrypoint returns. Re-assert the progress client for a short window so the
+# Grok Improve Prompt path keeps accessible in-progress feedback. Auth and
+# improve-prompt.js on the volume are left untouched.
+install_improve_prompt_client() {
+  hook="/app/deploy/hosted/bini/bin/install-improve-prompt-client.sh"
+  if [ -x "$hook" ]; then
+    "$hook" || true
+  elif [ -f "$hook" ]; then
+    sh "$hook" || true
+  fi
+}
+
+install_improve_prompt_client
+(
+  i=0
+  while [ "$i" -lt 45 ]; do
+    i=$((i + 1))
+    sleep 2
+    install_improve_prompt_client
+  done
+) >/dev/null 2>&1 &
+
 exec /usr/bin/tini -- "$@"

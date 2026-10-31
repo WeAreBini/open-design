@@ -94,6 +94,10 @@ const residualAllowedExactPaths = new Set([
   "apps/packaged/esbuild.config.mjs",
   // Browser service workers must be served as JavaScript files.
   "apps/web/public/od-notifications-sw.js",
+  // Hosted Improve Prompt client injected as `/od-bini.js` (volume + web out).
+  // Must stay plain browser JS so Railway can copy it onto `/app/.od/extensions`
+  // without a TS build step. Does not touch Grok auth or the token route.
+  "deploy/hosted/bini/extensions/od-bini.js",
   // Vendored dom-to-pptx browser bundle used by the packaged desktop renderer
   // for editable PPTX export. It is loaded into the off-screen Chromium page as
   // an upstream browser asset, not compiled as project-owned TypeScript.
