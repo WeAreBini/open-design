@@ -89,6 +89,8 @@ describe('mediaFailureNextStep', () => {
     it('reads throttling, overload, timeout and a local restart the same way', () => {
       expect(mediaFailureNextStep({ message: 'nano-banana image 429: quota exceeded' }))
         .toBe('retry-later');
+      expect(mediaFailureNextStep({ message: 'hyperframes render timed out after 300s' }))
+        .toBe('retry-later');
       expect(mediaFailureNextStep({ message: 'aihubmix video poll 503: upstream busy' }))
         .toBe('retry-later');
       expect(

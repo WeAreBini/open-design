@@ -35,18 +35,18 @@ button {
 button:focus-visible { outline: var(--stroke-thin, 1px) solid var(--blue); outline-offset: 2px; }
 
 button.primary {
-  background: var(--text-strong);
-  border-color: var(--text-strong);
+  background: var(--button-primary-bg);
+  border-color: var(--button-primary-border);
   border-radius: var(--radius-pill);
-  color: var(--bg);
+  color: var(--button-primary-ink);
 }
 button.primary:hover:not(:disabled) {
-  background: #353535;
-  border-color: #353535;
+  background: var(--button-primary-hover-bg);
+  border-color: var(--button-primary-hover-bg);
 }
 button.primary:active:not(:disabled) {
-  background: var(--text);
-  border-color: var(--text);
+  background: var(--button-primary-active-bg);
+  border-color: var(--button-primary-active-bg);
 }
 button.primary-ghost {
   background: var(--bg-subtle);

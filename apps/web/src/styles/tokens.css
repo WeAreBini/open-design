@@ -206,6 +206,15 @@
   --selected: #353535;
   --selected-soft: color-mix(in srgb, #353535 12%, transparent);
 
+  /* Primary CTA fill/ink — light is inverted ink-on-light; dark flips to an
+     elevated surface so Theme→Dark does not paint white-pill islands. Hover
+     mixes toward the page ground on both themes. */
+  --button-primary-bg: var(--text-strong);
+  --button-primary-border: var(--text-strong);
+  --button-primary-ink: var(--bg);
+  --button-primary-hover-bg: color-mix(in srgb, var(--text-strong) 88%, var(--bg));
+  --button-primary-active-bg: var(--text);
+
   --serif: "Albert Sans", "PingFang SC", "Microsoft YaHei", sans-serif;
   --sans: "Albert Sans", "PingFang SC", "Microsoft YaHei", sans-serif;
   --mono: "JiduMono Pro", ui-monospace, "SFMono-Regular", monospace;
@@ -224,27 +233,35 @@
    OS-level prefers-color-scheme media query (system mode = no data-theme attr). */
 [data-theme="dark"] {
   color-scheme: dark;
-  --bg: #202020;
-  --bg-app: #202020;
-  --bg-panel: #353535;
-  --bg-subtle: #494949;
-  --bg-muted: #5c5c5c;
+  /*
+   * Layered dark surfaces (Material surface-container + craft/color.md):
+   * ground → panel → elevated must step up, not share one gray. Pure #000/#fff
+   * vibrate; #202020 crushed mid-tones once volume CSS inject stopped applying.
+   */
+  --bg: #242424;
+  --bg-app: #242424;
+  --bg-panel: #2f2f2f;
+  /* Tracks / washes sit between panel and elevated so raised thumbs read up. */
+  --bg-subtle: #333333;
+  --bg-muted: #525252;
   --bg-fill-tertiary: rgba(255, 255, 255, 0.06);
   --bg-fill-secondary: rgba(255, 255, 255, 0.10);
   --bg-fill: rgba(255, 255, 255, 0.16);
-  --bg-elevated: #353535;
-  --glass-regular: rgba(53, 53, 53, 0.66);
+  --bg-elevated: #454545;
+  --glass-regular: rgba(47, 47, 47, 0.72);
   --glass-edge-highlight: color-mix(in srgb, #fff 14%, transparent);
-  --border: #5c5c5c;
-  --border-strong: #848484;
+  /* Prefer light edges on dark chrome (craft: rgba white ~8–22%). */
+  --border: #6a6a6a;
+  --border-strong: #9a9a9a;
   --border-selected: #a3a3a3;
-  --border-soft: #494949;
+  --border-soft: #4a4a4a;
 
-  --text: #ededed;
-  --text-strong: #fafafa;
-  --text-muted: #bdbdbd;
-  --text-soft: #848484;
-  --text-faint: #5c5c5c;
+  --text: #eef0f3;
+  --text-strong: #f8f9fa;
+  --text-muted: #d0d3d8;
+  /* Soft/faint must stay ≥~4.5:1 on --bg — legacy #5c5c5c/#848484 vanish. */
+  --text-soft: #c2c6cc;
+  --text-faint: #a8adb4;
 
   --accent: #ededed;
   --accent-contrast: #202020;
@@ -281,33 +298,48 @@
 
   --code-header-bg: #1e1e20;
   --code-body-bg: #18181b;
+
+  /* Selected affordances must invert with the surface — light #353535 vanishes
+     on dark ground (question-form picks, fidelity cards, filter rings). */
+  --select-ink: #f8f9fa;
+  --selected: #f8f9fa;
+  --selected-soft: color-mix(in srgb, #f8f9fa 16%, transparent);
+  /* Tick disc was #202020 — same as crushed ground, so the mark disappears.
+     Light disc keeps the green check readable on dark chrome. */
+  --tick-img: url("data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSI5IiBmaWxsPSIjRkFGQUZBIi8+PHBhdGggZD0iTTEyIDIyQzE3LjUyMjggMjIgMjIgMTcuNTIyOCAyMiAxMkMyMiA2LjQ3NzE1IDE3LjUyMjggMiAxMiAyQzYuNDc3MTUgMiAyIDYuNDc3MTUgMiAxMkMyIDE3LjUyMjggNi40NzcxNSAyMiAxMiAyMlpNMTcuNDU3MSA5LjQ1NzExTDExIDE1LjkxNDJMNi43OTI4OSAxMS43MDcxTDguMjA3MTEgMTAuMjkyOUwxMSAxMy4wODU4TDE2LjA0MjkgOC4wNDI4OUwxNy40NTcxIDkuNDU3MTFaIiBmaWxsPSIjMDBGRjA4Ii8+PC9zdmc+");
+
+  --button-primary-bg: var(--bg-elevated);
+  --button-primary-border: var(--border-strong);
+  --button-primary-ink: var(--text-strong);
+  --button-primary-hover-bg: color-mix(in srgb, var(--bg-elevated) 70%, var(--bg-muted));
+  --button-primary-active-bg: var(--bg-muted);
 }
 
 /* System mode: follow OS preference when no explicit data-theme is set. */
 @media (prefers-color-scheme: dark) {
   html:not([data-theme]) {
     color-scheme: dark;
-    --bg: #202020;
-    --bg-app: #202020;
-    --bg-panel: #353535;
-    --bg-subtle: #494949;
-    --bg-muted: #5c5c5c;
+    --bg: #242424;
+    --bg-app: #242424;
+    --bg-panel: #2f2f2f;
+    --bg-subtle: #333333;
+    --bg-muted: #525252;
     --bg-fill-tertiary: rgba(255, 255, 255, 0.06);
     --bg-fill-secondary: rgba(255, 255, 255, 0.10);
     --bg-fill: rgba(255, 255, 255, 0.16);
-    --bg-elevated: #353535;
-    --glass-regular: rgba(53, 53, 53, 0.66);
+    --bg-elevated: #454545;
+    --glass-regular: rgba(47, 47, 47, 0.72);
     --glass-edge-highlight: color-mix(in srgb, #fff 14%, transparent);
-    --border: #5c5c5c;
-    --border-strong: #848484;
+    --border: #6a6a6a;
+    --border-strong: #9a9a9a;
     --border-selected: #a3a3a3;
-    --border-soft: #494949;
+    --border-soft: #4a4a4a;
 
-    --text: #ededed;
-    --text-strong: #fafafa;
-    --text-muted: #bdbdbd;
-    --text-soft: #848484;
-    --text-faint: #5c5c5c;
+    --text: #eef0f3;
+    --text-strong: #f8f9fa;
+    --text-muted: #d0d3d8;
+    --text-soft: #c2c6cc;
+    --text-faint: #a8adb4;
 
     --accent: #ededed;
     --accent-contrast: #202020;
@@ -344,5 +376,16 @@
 
     --code-header-bg: #1e1e20;
     --code-body-bg: #18181b;
+
+    --select-ink: #f8f9fa;
+    --selected: #f8f9fa;
+    --selected-soft: color-mix(in srgb, #f8f9fa 16%, transparent);
+    --tick-img: url("data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSI5IiBmaWxsPSIjRkFGQUZBIi8+PHBhdGggZD0iTTEyIDIyQzE3LjUyMjggMjIgMjIgMTcuNTIyOCAyMiAxMkMyMiA2LjQ3NzE1IDE3LjUyMjggMiAxMiAyQzYuNDc3MTUgMiAyIDYuNDc3MTUgMiAxMkMyIDE3LjUyMjggNi40NzcxNSAyMiAxMiAyMlpNMTcuNDU3MSA5LjQ1NzExTDExIDE1LjkxNDJMNi43OTI4OSAxMS43MDcxTDguMjA3MTEgMTAuMjkyOUwxMSAxMy4wODU4TDE2LjA0MjkgOC4wNDI4OUwxNy40NTcxIDkuNDU3MTFaIiBmaWxsPSIjMDBGRjA4Ii8+PC9zdmc+");
+
+    --button-primary-bg: var(--bg-elevated);
+    --button-primary-border: var(--border-strong);
+    --button-primary-ink: var(--text-strong);
+    --button-primary-hover-bg: color-mix(in srgb, var(--bg-elevated) 70%, var(--bg-muted));
+    --button-primary-active-bg: var(--bg-muted);
   }
 }

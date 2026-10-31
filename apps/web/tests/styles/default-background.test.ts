@@ -18,11 +18,13 @@ describe('default app background colors', () => {
     expect(root).toContain('--bg-app: #fff;');
   });
 
-  it('keeps the dark theme background unchanged', () => {
+  it('keeps the dark theme on the stepped surface ladder ground', () => {
     const dark = cssBlock('[data-theme="dark"]');
 
-    expect(dark).toContain('--bg: #202020;');
-    expect(dark).toContain('--bg-app: #202020;');
+    // Proper dark pass: ground lifts off crushed #202020 so elevated chrome
+    // (composer / primary) can step up without looking like white islands.
+    expect(dark).toContain('--bg: #242424;');
+    expect(dark).toContain('--bg-app: #242424;');
   });
 
   it('prefers platform UI fonts over optional local app fonts', () => {

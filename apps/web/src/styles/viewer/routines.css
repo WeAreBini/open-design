@@ -1333,7 +1333,7 @@
 }
 .workspace-shell .workspace-tab.is-active {
   border-radius: 12px;
-  background: #ffffff;
+  background: var(--bg);
   border-color: var(--workspace-active-tab-border);
   box-shadow:
     0 1px 2px color-mix(in srgb, var(--text) 6%, transparent),
@@ -2347,7 +2347,7 @@
   display: block;
   border: 0;
   object-fit: cover;
-  background: #fff;
+  background: var(--bg);
   pointer-events: none;
 }
 .app .chat-design-artifact-preview .sketch-preview,
@@ -3108,14 +3108,14 @@
 
 .app .df-panel,
 .app .df-main {
-  background: #fff;
+  background: var(--bg);
 }
 .app .df-main {
   border-right-color: var(--border);
 }
 .app .df-body {
   padding: 4px 20px 20px;
-  background: #fff;
+  background: var(--bg);
 }
 .app .df-controls-row {
   margin: 0 0 14px;
@@ -4178,7 +4178,7 @@
   width: 1280px;
   height: 720px;
   border: 0;
-  background: #fff;
+  background: var(--bg);
   transform: scale(0.181);
   transform-origin: top left;
   pointer-events: none;
